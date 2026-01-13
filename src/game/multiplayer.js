@@ -1,0 +1,163 @@
+import { supabase } from '../lib/supabase'
+
+const BROADCAST_INTERVAL_MS = 1000 / 30 // 30 updates per second
+
+export class MultiplayerManager {
+  constructor(userId, username, profile) {
+    this.userId = userId
+    this.username = username
+    this.profile = profile || { color: '#ffffff' }
+    this.channel = null
+    this.lastBroadcastTime = 0
+    this.lastPosition = { x: 0, y: 0, z: 0 }
+    
+    // Callbacks
+    this.onPlayerJoin = null
+    this.onPlayerLeave = null
+    this.onPlayerMove = null
+    this.onChatMessage = null
+    this.onPresenceSync = null
+  }
+
+  async connect(roomId = 'world-1') {
+    this.channel = supabase.channel(roomId, {
+      config: {
+        presence: { key: this.userId },
+        broadcast: { ack: false, self: false }
+      }
+    })
+
+    // Listen for player position updates
+    this.channel.on('broadcast', { event: 'player-move' }, (payload) => {
+      if (this.onPlayerMove && payload.payload.userId !== this.userId) {
+        this.onPlayerMove(payload.payload)
+      }
+    })
+
+    // Listen for chat messages
+    this.channel.on('broadcast', { event: 'chat-message' }, (payload) => {
+      if (this.onChatMessage) {
+        this.onChatMessage(payload.payload)
+      }
+    })
+
+    // Listen for presence sync
+    this.channel.on('presence', { event: 'sync' }, () => {
+      const state = this.channel.presenceState()
+      if (this.onPresenceSync) {
+        this.onPresenceSync(state)
+      }
+    })
+
+    // Listen for player joins
+    this.channel.on('presence', { event: 'join' }, ({ newPresences }) => {
+      if (this.onPlayerJoin) {
+        newPresences.forEach(presence => {
+          if (presence.user_id !== this.userId) {
+            this.onPlayerJoin(presence)
+          }
+        })
+      }
+    })
+
+    // Listen for player leaves
+    this.channel.on('presence', { event: 'leave' }, ({ leftPresences }) => {
+      if (this.onPlayerLeave) {
+        leftPresences.forEach(presence => {
+          this.onPlayerLeave(presence)
+        })
+      }
+    })
+
+    // Subscribe and track presence
+    return new Promise((resolve, reject) => {
+      // Timeout to prevent hanging indefinetely
+      const timeoutId = setTimeout(() => {
+        console.warn('Multiplayer connection timed out, proceeding in offline mode')
+        resolve() // Resolve anyway to let the game start
+      }, 5000)
+
+      this.channel.subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          clearTimeout(timeoutId)
+          console.log('Successfully subscribed to channel')
+          try {
+            await this.channel.track({
+              user_id: this.userId,
+              username: this.username,
+              color: this.profile.color,
+              joined_at: new Date().toISOString()
+            })
+            console.log('Presence tracked')
+          } catch (err) {
+            console.error('Failed to track presence:', err)
+          }
+          resolve()
+        } else if (status === 'CHANNEL_ERROR') {
+          clearTimeout(timeoutId)
+          console.error('Channel error')
+          reject(new Error('Failed to subscribe to channel'))
+        }
+      })
+    })
+  }
+
+  broadcastPosition(state) {
+    if (!this.channel) return
+
+    const now = performance.now()
+    
+    // Throttle broadcasts
+    if (now - this.lastBroadcastTime < BROADCAST_INTERVAL_MS) {
+      return
+    }
+
+    // Only broadcast if position changed significantly
+    const pos = state.position
+    const threshold = 0.01
+    const moved = 
+      Math.abs(pos.x - this.lastPosition.x) > threshold ||
+      Math.abs(pos.y - this.lastPosition.y) > threshold ||
+      Math.abs(pos.z - this.lastPosition.z) > threshold
+
+    if (!moved) return
+
+    this.channel.send({
+      type: 'broadcast',
+      event: 'player-move',
+      payload: {
+        userId: this.userId,
+        username: this.username,
+        color: this.profile.color,
+        ...state,
+        timestamp: Date.now()
+      }
+    })
+
+    this.lastBroadcastTime = now
+    this.lastPosition = { ...pos }
+  }
+
+  sendChatMessage(message) {
+    if (!this.channel || !message.trim()) return
+
+    this.channel.send({
+      type: 'broadcast',
+      event: 'chat-message',
+      payload: {
+        userId: this.userId,
+        username: this.username,
+        message: message.trim(),
+        timestamp: Date.now()
+      }
+    })
+  }
+
+  async disconnect() {
+    if (this.channel) {
+      await this.channel.untrack()
+      await supabase.removeChannel(this.channel)
+      this.channel = null
+    }
+  }
+}

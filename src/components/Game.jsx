@@ -1,0 +1,278 @@
+import { useEffect, useRef, useState, useCallback } from 'react'
+import * as THREE from 'three'
+import { GameEngine } from '../game/engine'
+import { PlayerPhysics, STEPS_PER_FRAME } from '../game/physics'
+import { PlayerController } from '../game/player'
+import { MultiplayerManager } from '../game/multiplayer'
+import { RemotePlayersManager } from '../game/remotePlayers'
+import { Chat } from './Chat'
+import './Game.css'
+
+export function Game({ user, profile, onLogout }) {
+  const containerRef = useRef(null)
+  const gameRef = useRef(null)
+  const animationRef = useRef(null)
+  
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadingStatus, setLoadingStatus] = useState('Initializing...')
+  const [messages, setMessages] = useState([])
+  const [players, setPlayers] = useState([])
+  const [isConnected, setIsConnected] = useState(false)
+
+  const username = user.user_metadata?.username || user.email?.split('@')[0] || 'Player'
+
+  const handleSendMessage = useCallback((message) => {
+    if (gameRef.current?.multiplayer) {
+      gameRef.current.multiplayer.sendChatMessage(message)
+      // Add own message to chat
+      setMessages(prev => [...prev, {
+        userId: user.id,
+        username,
+        message,
+        timestamp: Date.now()
+      }])
+    }
+  }, [user.id, username])
+
+  useEffect(() => {
+    if (!containerRef.current) return
+
+    let engine = null
+    let physics = null
+    let controller = null
+    let multiplayer = null
+    let remotePlayers = null
+    let isRunning = true
+
+    async function initGame() {
+      try {
+        console.log('Starting game initialization...')
+        
+        // Clear container first to prevent duplicate canvases
+        if (containerRef.current) {
+          containerRef.current.innerHTML = ''
+        }
+        
+        // Step 1: Initialize Three.js engine
+        setLoadingStatus('Setting up 3D engine...')
+        engine = new GameEngine(containerRef.current)
+        // Store engine reference immediately for cleanup
+        if (!gameRef.current) gameRef.current = {}
+        gameRef.current.engine = engine
+        
+        console.log('Engine initialized')
+        
+        // Step 2: Load map
+        setLoadingStatus('Loading map...')
+        try {
+          await engine.loadMap()
+          console.log('Map loaded successfully')
+        } catch (error) {
+          console.warn('Map load failed, creating placeholder world:', error)
+          createPlaceholderWorld(engine)
+        }
+
+        // Step 3: Initialize physics
+        setLoadingStatus('Initializing physics...')
+        console.log('Initializing Physics...')
+        physics = new PlayerPhysics(engine.worldOctree)
+        // Reset physics to ensure player starts at safe position
+        physics.reset()
+        console.log('Physics initialized')
+
+        // Step 4: Initialize player controller
+        setLoadingStatus('Setting up controls...')
+        console.log('Initializing Controller...')
+        controller = new PlayerController(engine.camera, physics, engine.renderer.domElement, engine, profile)
+        console.log('Controls initialized')
+
+        // Step 5: Initialize remote players manager
+        console.log('Initializing RemotePlayers...')
+        remotePlayers = new RemotePlayersManager(engine.scene)
+
+        // Step 6: Connect to multiplayer
+        setLoadingStatus('Connecting to server...')
+        console.log('Connecting to Multiplayer...')
+        multiplayer = new MultiplayerManager(user.id, username, profile)
+        
+        // Set up multiplayer callbacks
+        multiplayer.onPlayerMove = (data) => {
+          if (!remotePlayers.players.has(data.userId)) {
+            remotePlayers.addPlayer(data.userId, data.username, data.color, data.position)
+          }
+          remotePlayers.updatePlayer(data.userId, data)
+        }
+
+        multiplayer.onPlayerJoin = (presence) => {
+          console.log('Player joined:', presence.username)
+          remotePlayers.addPlayer(presence.user_id, presence.username, presence.color)
+        }
+
+        multiplayer.onPlayerLeave = (presence) => {
+          console.log('Player left:', presence.user_id)
+          remotePlayers.removePlayer(presence.user_id)
+        }
+
+        multiplayer.onChatMessage = (data) => {
+          setMessages(prev => [...prev.slice(-50), data]) // Keep last 50 messages
+        }
+
+        multiplayer.onPresenceSync = (state) => {
+          const playerList = Object.entries(state)
+            .filter(([id]) => id !== user.id)
+            .map(([id, presences]) => ({
+              userId: id,
+              username: presences[0]?.username || 'Unknown'
+            }))
+          setPlayers(playerList)
+        }
+
+        await multiplayer.connect()
+        setIsConnected(true)
+
+        // Store references
+        gameRef.current = {
+          engine,
+          physics,
+          controller,
+          multiplayer,
+          remotePlayers
+        }
+
+        setIsLoading(false)
+        setLoadingStatus('')
+
+        // Start game loop
+        function gameLoop() {
+          if (!isRunning) return
+
+          const deltaTime = engine.getDeltaTime() / STEPS_PER_FRAME
+
+          // Physics substeps for accurate collision
+          for (let i = 0; i < STEPS_PER_FRAME; i++) {
+            controller.update(deltaTime)
+            physics.update(deltaTime)
+            physics.teleportIfOutOfBounds(engine.camera)
+            engine.updateProjectiles(deltaTime, physics)
+          }
+
+          // Update remote players
+          remotePlayers.update()
+
+          // Broadcast own position
+          multiplayer.broadcastPosition(controller.getState())
+
+          // Render
+          engine.render()
+
+          animationRef.current = requestAnimationFrame(gameLoop)
+        }
+
+        animationRef.current = requestAnimationFrame(gameLoop)
+
+      } catch (error) {
+        console.error('Failed to initialize game:', error)
+        setLoadingStatus(`Error: ${error.message}`)
+      }
+    }
+
+    initGame()
+
+      // Cleanup
+    return () => {
+      isRunning = false
+      
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current)
+      }
+
+      // Cleanup components
+      if (multiplayer) multiplayer.disconnect()
+      if (remotePlayers) remotePlayers.dispose()
+      if (controller) controller.dispose()
+      if (engine) engine.dispose()
+      
+      // Clear refs
+      gameRef.current = null
+    }
+  }, [user.id, username, profile])
+
+
+  return (
+    <div className="game-wrapper">
+      <div ref={containerRef} className="game-container" />
+      
+      {isLoading && (
+        <div className="loading-overlay">
+          <div className="loading-content">
+            <div className="loading-spinner" />
+            <p className="loading-text">{loadingStatus}</p>
+          </div>
+        </div>
+      )}
+
+      {!isLoading && (
+        <>
+          <div className="game-hud">
+            <div className="hud-top">
+              <div className="player-info">
+                <span className="player-name">{username}</span>
+                <span className={`connection-status ${isConnected ? 'connected' : ''}`}>
+                  {isConnected ? '● Connected' : '○ Disconnected'}
+                </span>
+              </div>
+              <button onClick={onLogout} className="logout-btn">
+                Logout
+              </button>
+            </div>
+
+            <div className="hud-center">
+              <div className="crosshair">+</div>
+            </div>
+
+            <div className="hud-instructions">
+              Click to start • WASD to move • SPACE to jump • ESC to unlock mouse
+            </div>
+          </div>
+
+          <Chat 
+            messages={messages} 
+            onSendMessage={handleSendMessage}
+            players={[{ userId: user.id, username }, ...players]}
+          />
+        </>
+      )}
+    </div>
+  )
+}
+
+// Create a simple placeholder world when map file is missing
+function createPlaceholderWorld(engine) {
+  // Ground plane
+  const groundGeometry = new THREE.PlaneGeometry(100, 100)
+  const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x4a7c4e })
+  const ground = new THREE.Mesh(groundGeometry, groundMaterial)
+  ground.rotation.x = -Math.PI / 2
+  ground.receiveShadow = true
+  engine.scene.add(ground)
+
+  // Add some boxes for obstacles
+  const boxGeometry = new THREE.BoxGeometry(2, 2, 2)
+  const boxMaterial = new THREE.MeshLambertMaterial({ color: 0x8b7355 })
+  
+  const positions = [
+    [5, 1, 5], [-5, 1, -5], [10, 1, -3], [-8, 1, 7],
+    [0, 1, 15], [12, 1, 12], [-12, 1, -12]
+  ]
+
+  positions.forEach(([x, y, z]) => {
+    const box = new THREE.Mesh(boxGeometry, boxMaterial)
+    box.position.set(x, y, z)
+    box.castShadow = true
+    box.receiveShadow = true
+    engine.scene.add(box)
+  })
+
+  // Rebuild octree with placeholder geometry
+  engine.worldOctree.fromGraphNode(engine.scene)
+}
