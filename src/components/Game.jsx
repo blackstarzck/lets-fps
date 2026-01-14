@@ -26,6 +26,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
   const [ballColor, setBallColor] = useState(profile?.color || '#ffff00')
   const [showCharacterModal, setShowCharacterModal] = useState(false)
   const [notifications, setNotifications] = useState([])
+  const initialSyncDoneRef = useRef(false) // Track if initial presence sync is complete
 
   const username = user.user_metadata?.username || user.email?.split('@')[0] || 'Player'
   const isMaster = user.email === 'bucheongosok@gmail.com'
@@ -225,7 +226,6 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           console.log('[Game] Player joined:', presence.username, presence.model_url)
           const activeRemotePlayers = gameRef.current?.remotePlayers
           const activeController = gameRef.current?.controller
-          const activeMultiplayer = gameRef.current?.multiplayer
 
           let isNewPlayer = true;
           if (activeRemotePlayers) {
@@ -236,8 +236,11 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
             activeRemotePlayers.addPlayer(presence.user_id, presence.username, presence.color, undefined, presence.model_url || presence.modelUrl)
           }
 
-          if (isNewPlayer) {
+          // Only show notification after initial sync is complete (prevents flood of notifications on login)
+          if (isNewPlayer && initialSyncDoneRef.current) {
             addNotification(`${presence.username} joined the game`, 'join')
+          } else if (!initialSyncDoneRef.current) {
+            console.log(`[Game] Player ${presence.username} already online (initial sync)`)
           } else {
             console.log(`[Game] Player ${presence.username} updated (ignored join notification)`)
           }
@@ -262,7 +265,10 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         multiplayer.onPlayerLeave = (presence) => {
           console.log('Player left:', presence.user_id)
           remotePlayers.removePlayer(presence.user_id)
-          addNotification(`${presence.username} left the game`, 'leave')
+          // Only show notification after initial sync is complete
+          if (initialSyncDoneRef.current) {
+            addNotification(`${presence.username} left the game`, 'leave')
+          }
         }
 
         multiplayer.onChatMessage = (data) => {
@@ -297,6 +303,15 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
               }
             })
           setOnlinePlayers(playerList)
+
+          // Mark initial sync as complete after first sync
+          // Use a small delay to ensure all initial presence events are processed
+          if (!initialSyncDoneRef.current) {
+            setTimeout(() => {
+              initialSyncDoneRef.current = true
+              console.log('[Game] Initial presence sync complete - notifications enabled')
+            }, 1000)
+          }
         }
 
         // Handle remote projectile spawns
