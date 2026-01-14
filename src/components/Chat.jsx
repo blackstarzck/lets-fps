@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import './Chat.css'
 
-export function Chat({ messages, onSendMessage, players }) {
+export function Chat({ messages, onSendMessage, players, isMaster, onKickPlayer }) {
   const [inputValue, setInputValue] = useState('')
   const [isExpanded, setIsExpanded] = useState(false)
   const messagesEndRef = useRef(null)
@@ -76,7 +76,21 @@ export function Chat({ messages, onSendMessage, players }) {
           <div className="players-title">Online Players:</div>
           {players.map((player, index) => (
             <div key={index} className="player-item">
-              {player.username}
+              <span className="player-name">{player.username}</span>
+              {isMaster && index > 0 && ( // First player is self, don't show kick button
+                <button 
+                  className="kick-btn"
+                  onClick={(e) => {
+                    e.stopPropagation() // Prevent chat collapse
+                    if (window.confirm(`Are you sure you want to kick ${player.username}?`)) {
+                      onKickPlayer(player.userId)
+                    }
+                  }}
+                  title="Kick player"
+                >
+                  🚫
+                </button>
+              )}
             </div>
           ))}
         </div>

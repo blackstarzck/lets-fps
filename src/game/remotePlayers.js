@@ -1,7 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-
-const STORAGE_URL = 'https://hgczujipznppjguxzkor.supabase.co/storage/v1/object/public/models/'
+import { MODELS, STORAGE_URL } from './constants'
 
 // Interpolation factor for smooth movement
 const LERP_FACTOR = 0.15
@@ -33,7 +32,8 @@ export class RemotePlayersManager {
 
     // Create container group
     const playerGroup = new THREE.Group()
-    playerGroup.position.set(initialPosition.x, initialPosition.y, initialPosition.z)
+    // Adjust Y position to match updatePlayer logic (capsule top -> floor)
+    playerGroup.position.set(initialPosition.x, initialPosition.y - 1, initialPosition.z)
     
     // 1. Create Placeholder first
     const placeholder = new THREE.Mesh(this.placeholderGeometry, new THREE.MeshLambertMaterial({ color }))
@@ -52,10 +52,11 @@ export class RemotePlayersManager {
     // Store player data
     const playerData = {
       mesh: playerGroup,
-      targetPosition: new THREE.Vector3(initialPosition.x, initialPosition.y, initialPosition.z),
+      targetPosition: new THREE.Vector3(initialPosition.x, initialPosition.y - 1, initialPosition.z),
       targetRotation: new THREE.Euler(0, 0, 0),
       username,
       modelUrl,
+      yOffset: 0,
       mixer: null,
       actions: {},
       isMoving: false,
@@ -72,6 +73,11 @@ export class RemotePlayersManager {
 
   async loadPlayerModel(userId, modelFile, colorHex) {
     try {
+      // Find model definition
+      const modelDef = MODELS.find(m => m.file === modelFile)
+      const yOffset = modelDef ? (modelDef.yOffset || 0) : 0
+      const radius = modelDef ? (modelDef.radius || 0.35) : 0.35
+
       // Construct full URL from filename
       const url = modelFile.startsWith('http') ? modelFile : STORAGE_URL + modelFile
       
@@ -86,6 +92,12 @@ export class RemotePlayersManager {
 
       const player = this.players.get(userId)
       if (!player) return // Player might have left
+
+      // Update player yOffset and radius
+      player.yOffset = yOffset
+      player.radius = radius
+
+      console.log(`Loading model for ${userId}: ${modelFile}, yOffset: ${yOffset}`)
 
       // Clone the model
       const model = gltf.scene.clone()
@@ -109,7 +121,7 @@ export class RemotePlayersManager {
       // Assuming standard mixamo-like characters ~1.8m tall
       // Adjust these based on your specific models
       model.scale.set(1, 1, 1) 
-      model.position.y = 0 // Align feet to ground
+      model.position.y = yOffset || 0 // Apply Y offset for different models
       model.rotation.y = Math.PI // Fix orientation if needed (Mixamo often faces +Z)
 
       // Animation Setup
@@ -256,6 +268,29 @@ export class RemotePlayersManager {
 
   getPlayerCount() {
     return this.players.size
+  }
+
+  getRemoteColliders() {
+    const colliders = []
+    this.players.forEach((player) => {
+      // Create segment for capsule
+      const radius = player.radius || 0.35
+      const height = 1.8 // Standard height
+      
+      // Capsule segment starts at radius up and ends at height-radius up
+      const start = new THREE.Vector3(player.mesh.position.x, player.mesh.position.y + radius, player.mesh.position.z)
+      const end = new THREE.Vector3(player.mesh.position.x, player.mesh.position.y + height - radius, player.mesh.position.z)
+
+      colliders.push({
+        id: player.username,
+        start: start,
+        end: end,
+        radius: radius,
+        position: player.mesh.position, // Keep for backward compatibility/fallback
+        height: height
+      })
+    })
+    return colliders
   }
 
   dispose() {

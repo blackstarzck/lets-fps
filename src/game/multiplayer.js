@@ -18,6 +18,7 @@ export class MultiplayerManager {
     this.onChatMessage = null
     this.onPresenceSync = null
     this.onProjectileSpawn = null
+    this.onKick = null
   }
 
   async connect(roomId = 'world-1') {
@@ -46,6 +47,13 @@ export class MultiplayerManager {
     this.channel.on('broadcast', { event: 'projectile-spawn' }, (payload) => {
       if (this.onProjectileSpawn && payload.payload.userId !== this.userId) {
         this.onProjectileSpawn(payload.payload)
+      }
+    })
+
+    // Listen for kick events
+    this.channel.on('broadcast', { event: 'kick-event' }, (payload) => {
+      if (this.onKick) {
+        this.onKick(payload.payload)
       }
     })
 
@@ -158,6 +166,22 @@ export class MultiplayerManager {
         userId: this.userId,
         username: this.username,
         message: message.trim(),
+        timestamp: Date.now()
+      }
+    })
+  }
+
+  kickPlayer(targetUserId) {
+    if (!this.channel) return
+
+    console.log('Broadcasting kick event for user:', targetUserId)
+    
+    this.channel.send({
+      type: 'broadcast',
+      event: 'kick-event',
+      payload: {
+        targetUserId: targetUserId,
+        kickedBy: this.userId,
         timestamp: Date.now()
       }
     })

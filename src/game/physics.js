@@ -50,6 +50,104 @@ export class PlayerPhysics {
     }
   }
 
+  resolvePlayerCollisions(remoteColliders) {
+    const p1Start = this.collider.start
+    const p1End = this.collider.end
+    const r1 = this.collider.radius
+
+    for (const remote of remoteColliders) {
+      let p2Start, p2End, r2
+      
+      // Use segment info if available, otherwise approximation from position/height
+      if (remote.start && remote.end) {
+        p2Start = remote.start
+        p2End = remote.end
+        r2 = remote.radius
+      } else {
+        r2 = remote.radius || 0.35
+        const height = remote.height || 1.8
+        p2Start = remote.position.clone()
+        p2Start.y += r2
+        p2End = remote.position.clone()
+        p2End.y += height - r2
+      }
+
+      const { point1, point2, distSq } = this._closestPointSegmentToSegment(p1Start, p1End, p2Start, p2End)
+      
+      const minSeparation = r1 + r2
+      
+      if (distSq < minSeparation * minSeparation && distSq > 1e-10) {
+        const dist = Math.sqrt(distSq)
+        const overlap = minSeparation - dist
+        
+        // Direction from remote(point2) to local(point1)
+        const normal = point1.clone().sub(point2).normalize()
+        
+        // Push local player out
+        this.collider.translate(normal.clone().multiplyScalar(overlap))
+        
+        // Adjust velocity to slide
+        const vDotN = this.velocity.dot(normal)
+        if (vDotN < 0) {
+          this.velocity.addScaledVector(normal, -vDotN)
+        }
+      }
+    }
+  }
+
+  _closestPointSegmentToSegment(p1, q1, p2, q2) {
+    const d1 = q1.clone().sub(p1)
+    const d2 = q2.clone().sub(p2)
+    const r = p1.clone().sub(p2)
+    const a = d1.dot(d1)
+    const e = d2.dot(d2)
+    const f = d2.dot(r)
+
+    const epsilon = 1e-6
+
+    if (a <= epsilon && e <= epsilon) {
+       return { point1: p1.clone(), point2: p2.clone(), distSq: p1.distanceToSquared(p2) }
+    }
+    if (a <= epsilon) {
+       const t = Math.max(0.0, Math.min(1.0, f / e))
+       const c2 = p2.clone().addScaledVector(d2, t)
+       return { point1: p1.clone(), point2: c2, distSq: p1.distanceToSquared(c2) }
+    }
+    if (e <= epsilon) {
+       const s = Math.max(0.0, Math.min(1.0, -d1.dot(r) / a))
+       const c1 = p1.clone().addScaledVector(d1, s)
+       return { point1: c1, point2: p2.clone(), distSq: c1.distanceToSquared(p2) }
+    }
+
+    const c = d1.dot(r)
+    const b = d1.dot(d2)
+    const denom = a * e - b * b
+    
+    let s = 0.0
+    let t = 0.0
+
+    if (denom !== 0.0) {
+        s = Math.max(0.0, Math.min(1.0, (b * f - c * e) / denom))
+    } else {
+        s = 0.0
+    }
+
+    t = (b * s + f) / e
+
+    if (t < 0.0) {
+        t = 0.0
+        s = Math.max(0.0, Math.min(1.0, -c / a))
+    } else if (t > 1.0) {
+        t = 1.0
+        s = Math.max(0.0, Math.min(1.0, (b - c) / a))
+    }
+
+    const c1 = p1.clone().addScaledVector(d1, s)
+    const c2 = p2.clone().addScaledVector(d2, t)
+    
+    return { point1: c1, point2: c2, distSq: c1.distanceToSquared(c2) }
+  }
+
   update(deltaTime) {
     let damping = Math.exp(-4 * deltaTime) - 1
 

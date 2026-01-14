@@ -25,6 +25,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
   const [showCharacterModal, setShowCharacterModal] = useState(false)
 
   const username = user.user_metadata?.username || user.email?.split('@')[0] || 'Player'
+  const isMaster = user.email === 'bucheongosok@gmail.com'
 
   const handleTogglePerspective = () => {
     if (gameRef.current?.controller) {
@@ -54,6 +55,12 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
       }])
     }
   }, [user.id, username])
+
+  const handleKickPlayer = useCallback((targetUserId) => {
+    if (gameRef.current?.multiplayer && isMaster) {
+      gameRef.current.multiplayer.kickPlayer(targetUserId)
+    }
+  }, [isMaster])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -122,6 +129,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         // Set up multiplayer callbacks
         multiplayer.onPlayerMove = (data) => {
           if (!remotePlayers.players.has(data.userId)) {
+            console.log('Adding new player from move:', data.username, data.modelUrl)
             // Pass modelUrl and color from data
             remotePlayers.addPlayer(data.userId, data.username, data.color, data.position, data.model_url || data.modelUrl)
           }
@@ -129,7 +137,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         }
 
         multiplayer.onPlayerJoin = (presence) => {
-          console.log('Player joined:', presence.username)
+          console.log('Player joined:', presence.username, presence.model_url)
           // Ensure we pass model_url from presence
           remotePlayers.addPlayer(presence.user_id, presence.username, presence.color, undefined, presence.model_url || presence.modelUrl)
         }
@@ -167,6 +175,17 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           }
         }
 
+        multiplayer.onKick = (data) => {
+          if (data.targetUserId === user.id) {
+            multiplayer.disconnect()
+            alert('You have been kicked by the master.')
+            onLogout()
+          } else {
+            console.log('Another player was kicked:', data.targetUserId)
+            remotePlayers.removePlayer(data.targetUserId)
+          }
+        }
+
         await multiplayer.connect()
         setIsConnected(true)
 
@@ -185,11 +204,13 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           if (!isRunning) return
 
           const deltaTime = engine.getDeltaTime() / STEPS_PER_FRAME
+          const remoteColliders = remotePlayers.getRemoteColliders()
 
           // Physics substeps for accurate collision
           for (let i = 0; i < STEPS_PER_FRAME; i++) {
             controller.update(deltaTime)
             physics.update(deltaTime)
+            physics.resolvePlayerCollisions(remoteColliders)
             physics.teleportIfOutOfBounds(engine.camera)
             engine.updateProjectiles(deltaTime, physics)
           }
@@ -361,6 +382,8 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
             messages={messages} 
             onSendMessage={handleSendMessage}
             players={[{ userId: user.id, username }, ...players]}
+            isMaster={isMaster}
+            onKickPlayer={handleKickPlayer}
           />
           
           {showCharacterModal && (

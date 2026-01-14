@@ -1,7 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-
-const STORAGE_URL = 'https://hgczujipznppjguxzkor.supabase.co/storage/v1/object/public/models/'
+import { MODELS, STORAGE_URL } from './constants'
 
 export class PlayerController {
   constructor(camera, physics, domElement, engine, profile) {
@@ -53,6 +52,15 @@ export class PlayerController {
 
   async loadModel(modelFile, colorHex) {
     try {
+      // Find model definition to get yOffset
+      const modelDef = MODELS.find(m => m.file === modelFile)
+      this.modelYOffset = modelDef ? (modelDef.yOffset || 0) : 0
+      
+      // Update collision radius if defined
+      if (modelDef && modelDef.radius) {
+        this.physics.collider.radius = modelDef.radius
+      }
+
       // Construct full URL from filename
       const url = modelFile.startsWith('http') ? modelFile : STORAGE_URL + modelFile
       
@@ -271,6 +279,9 @@ export class PlayerController {
       
       const bottomPos = this.physics.collider.start.clone()
       bottomPos.y -= this.physics.collider.radius
+      
+      // Apply model-specific Y offset
+      bottomPos.y += (this.modelYOffset || 0)
       
       this.model.position.copy(bottomPos)
       

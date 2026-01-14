@@ -147,4 +147,23 @@
   color: rgba(255, 255, 255, 0.8);
   font-size: 0.85rem;
   padding: 4px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.kick-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.kick-btn:hover {
+  background: rgba(255, 0, 0, 0.2);
+  transform: scale(1.1);
 }
