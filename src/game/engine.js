@@ -222,11 +222,16 @@ export class GameEngine {
             // Trigger Knockback Event
             // Impulse direction is opposite to normal (Sphere -> Player)
             // Magnitude depends on sphere velocity/mass
-            if (this.onProjectileHit) {
+            if (this.onProjectileHit && !sphere.hitSet.has(remote.id)) {
+                sphere.hitSet.add(remote.id) // Mark this player as hit by this sphere
+
                 // Approximate impulse based on sphere velocity
                 // We use a fixed base impulse for gameplay feel + velocity factor
                 const impulseDir = normal.clone().negate()
-                const impulseMag = 15 + sphere.velocity.length() * 0.5 // Base 15 + half velocity
+                // Cap velocity contribution to avoid crazy knockback
+                const speed = Math.min(sphere.velocity.length(), 50) 
+                const impulseMag = 15 + speed * 0.5 
+                
                 // Add some up-vector to lift them off ground
                 impulseDir.y += 0.5 
                 impulseDir.normalize().multiplyScalar(impulseMag)
@@ -281,6 +286,7 @@ export class GameEngine {
     // Physics properties
     sphere.collider = new THREE.Sphere(position.clone(), radius)
     sphere.velocity = velocity.clone()
+    sphere.hitSet = new Set() // Track players hit by this projectile
     
     // Lifetime - 40 seconds
     sphere.spawnTime = performance.now()
