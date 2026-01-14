@@ -120,17 +120,17 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
 
   const handleSendMessage = useCallback((message) => {
     if (gameRef.current?.multiplayer) {
-      gameRef.current.multiplayer.sendChatMessage(message)
+      gameRef.current.multiplayer.sendChatMessage(message, ballColor)
       // Add own message to chat
       setMessages(prev => [...prev, {
         userId: user.id,
         username,
-        color: profile.color,
+        color: ballColor,
         message,
         timestamp: Date.now()
       }])
     }
-  }, [user.id, username, profile])
+  }, [user.id, username, ballColor])
 
   const handleKickPlayer = useCallback((targetUserId) => {
     if (gameRef.current?.multiplayer && isMaster) {
