@@ -37,16 +37,69 @@ export class PlayerPhysics {
     if (result) {
       this.onFloor = result.normal.y > 0
 
-      if (!this.onFloor) {
-        this.velocity.addScaledVector(
-          result.normal,
-          -result.normal.dot(this.velocity)
-        )
+      // Project velocity onto collision plane to prevent sticking/jittering
+      // Do this for both walls and floor to kill velocity into the surface
+      const vDotN = result.normal.dot(this.velocity)
+      if (vDotN < 0) {
+        this.velocity.addScaledVector(result.normal, -vDotN)
       }
 
       if (result.depth >= 1e-10) {
         this.collider.translate(result.normal.multiplyScalar(result.depth))
       }
+    }
+  }
+
+  update(deltaTime) {
+    let damping = Math.exp(-4 * deltaTime) - 1
+
+    if (!this.onFloor) {
+      this.velocity.y -= GRAVITY * deltaTime
+      // Small air resistance
+      damping *= 0.1
+    }
+
+    this.velocity.addScaledVector(this.velocity, damping)
+
+    // Terminal velocity cap to prevent flying off to space
+    const maxSpeed = 50
+    if (this.velocity.lengthSq() > maxSpeed * maxSpeed) {
+        this.velocity.normalize().multiplyScalar(maxSpeed)
+    }
+
+    const deltaPosition = this.velocity.clone().multiplyScalar(deltaTime)
+    this.collider.translate(deltaPosition)
+
+    this.checkCollisions()
+  }
+
+  jump() {
+    if (this.onFloor) {
+      this.velocity.y = 15
+    }
+  }
+
+  applyImpulse(impulse) {
+    this.velocity.add(impulse)
+    this.onFloor = false // Lift off floor to reduce friction immediately
+  }
+
+  getPosition() {
+    return this.collider.end.clone()
+  }
+
+  setPosition(position) {
+    const offset = new THREE.Vector3(0, -0.65, 0)
+    this.collider.start.copy(position).add(offset)
+    offset.y = 0
+    this.collider.end.copy(position)
+  }
+
+  teleportIfOutOfBounds(camera) {
+    if (camera.position.y <= -25) {
+      this.reset()
+      camera.position.copy(this.collider.end)
+      camera.rotation.set(0, 0, 0)
     }
   }
 
@@ -81,14 +134,12 @@ export class PlayerPhysics {
 
       // Validate remote segment
       if (isNaN(p2Start.x) || isNaN(p2Start.y) || isNaN(p2Start.z)) {
-          console.warn('[Physics] Skipping remote collider with NaN start');
           continue;
       }
 
       const { point1, point2, distSq } = this._closestPointSegmentToSegment(p1Start, p1End, p2Start, p2End)
       
       if (isNaN(distSq)) {
-          console.warn('[Physics] distSq is NaN');
           continue;
       }
 
@@ -115,6 +166,74 @@ export class PlayerPhysics {
           this.velocity.addScaledVector(normal, -vDotN)
         }
       }
+    }
+  }
+
+  // Handle collision between player and a sphere projectile
+  resolveSphereCollision(sphere) {
+    // Ignore own projectiles for a short grace period (200ms) to prevent self-collision on spawn
+    if (sphere.owner === 'local' && (performance.now() - sphere.spawnTime < 200)) return
+
+    // Use Line3 to find closest point on capsule segment to sphere center
+    const line = new THREE.Line3(this.collider.start, this.collider.end)
+    const closestPoint = new THREE.Vector3()
+    line.closestPointToPoint(sphere.collider.center, true, closestPoint)
+    
+    const vector1 = new THREE.Vector3()
+    
+    const sphereCenter = sphere.collider.center
+    
+    const r = this.collider.radius + sphere.collider.radius
+    const r2 = r * r
+
+    const d2 = closestPoint.distanceToSquared(sphereCenter)
+
+    if (d2 < r2) {
+      // Safety check for zero distance
+      let normalVector
+      const dist = Math.sqrt(d2)
+      
+      if (dist < 1e-6) {
+          // If sphere is exactly inside the line, push it horizontally
+          normalVector = new THREE.Vector3(1, 0, 0)
+      } else {
+          normalVector = new THREE.Vector3().subVectors(closestPoint, sphereCenter).normalize()
+      }
+      
+      // Calculate relative velocity
+      const vRel = vector1.subVectors(this.velocity, sphere.velocity)
+      const vRelDotN = vRel.dot(normalVector)
+
+      // Only resolve if they are moving towards each other
+      if (vRelDotN < 0) {
+          // Treat player as Kinematic (Infinite Mass)
+          // Player velocity is unaffected by collision
+          // Ball bounces off taking into account player velocity
+          
+          const restitution = 0.6 
+          
+          // Simple reflection for ball relative to player
+          // vBall_new_rel = -e * vBall_old_rel
+          // But we need to do this along the normal
+          
+          // Impulse j applied to ball
+          // m2 = 1
+          const j = -(1 + restitution) * vRelDotN * 1
+          
+          // Apply impulse ONLY to sphere
+          const impulse = normalVector.clone().multiplyScalar(-j) 
+          sphere.velocity.add(impulse)
+          
+          // Cap sphere velocity
+          if (sphere.velocity.lengthSq() > 2500) { 
+              sphere.velocity.normalize().multiplyScalar(50)
+          }
+      }
+
+      // Push sphere out fully
+      const overlap = r - dist
+      // Move ONLY sphere out along normal (away from player)
+      sphereCenter.addScaledVector(normalVector, -overlap)
     }
   }
 
@@ -169,84 +288,5 @@ export class PlayerPhysics {
     const c2 = p2.clone().addScaledVector(d2, t)
     
     return { point1: c1, point2: c2, distSq: c1.distanceToSquared(c2) }
-  }
-
-  update(deltaTime) {
-    let damping = Math.exp(-4 * deltaTime) - 1
-
-    if (!this.onFloor) {
-      this.velocity.y -= GRAVITY * deltaTime
-      // Small air resistance
-      damping *= 0.1
-    }
-
-    this.velocity.addScaledVector(this.velocity, damping)
-
-    const deltaPosition = this.velocity.clone().multiplyScalar(deltaTime)
-    this.collider.translate(deltaPosition)
-
-    this.checkCollisions()
-  }
-
-  jump() {
-    if (this.onFloor) {
-      this.velocity.y = 15
-    }
-  }
-
-  applyImpulse(impulse) {
-    this.velocity.add(impulse)
-    this.onFloor = false // Lift off floor to reduce friction immediately
-  }
-
-  getPosition() {
-    return this.collider.end.clone()
-  }
-
-  setPosition(position) {
-    const offset = new THREE.Vector3(0, -0.65, 0)
-    this.collider.start.copy(position).add(offset)
-    offset.y = 0
-    this.collider.end.copy(position)
-  }
-
-  teleportIfOutOfBounds(camera) {
-    if (camera.position.y <= -25) {
-      this.reset()
-      camera.position.copy(this.collider.end)
-      camera.rotation.set(0, 0, 0)
-    }
-  }
-
-  // Handle collision between player and a sphere projectile
-  resolveSphereCollision(sphere) {
-    // Use Line3 to find closest point on capsule segment to sphere center
-    const line = new THREE.Line3(this.collider.start, this.collider.end)
-    const closestPoint = new THREE.Vector3()
-    line.closestPointToPoint(sphere.collider.center, true, closestPoint)
-    
-    const vector1 = new THREE.Vector3()
-    const vector2 = new THREE.Vector3()
-    const vector3 = new THREE.Vector3()
-
-    const sphereCenter = sphere.collider.center
-    
-    const r = this.collider.radius + sphere.collider.radius
-    const r2 = r * r
-
-    const d2 = closestPoint.distanceToSquared(sphereCenter)
-
-    if (d2 < r2) {
-      const normalVector = new THREE.Vector3().subVectors(closestPoint, sphereCenter).normalize()
-      
-      const v1 = vector2.copy(normalVector).multiplyScalar(normalVector.dot(this.velocity))
-      const v2 = vector3.copy(normalVector).multiplyScalar(normalVector.dot(sphere.velocity))
-
-      this.velocity.add(v2).sub(v1)
-      sphere.velocity.add(v1).sub(v2)
-
-      const d = (r - Math.sqrt(d2)) / 2
-      sphereCenter.addScaledVector(normalVector, -d)
-    }
   }
 }

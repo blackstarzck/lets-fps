@@ -387,25 +387,29 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           remotePlayers
         }
 
-        // Start game loop
+          // Start game loop
         let frameCount = 0
         function gameLoop() {
           if (!isRunning) return
 
-          const deltaTime = engine.getDeltaTime() / STEPS_PER_FRAME
+          const rawDeltaTime = engine.getDeltaTime()
+          const subStepDelta = rawDeltaTime / STEPS_PER_FRAME
           const remoteColliders = remotePlayers.getRemoteColliders()
 
-          // Physics substeps for accurate collision
+          // 1. Process Input Once per Frame
+          // Pass full frame deltaTime to controller
+          controller.update(rawDeltaTime)
+
+          // 2. Physics substeps for accurate collision
           for (let i = 0; i < STEPS_PER_FRAME; i++) {
-            controller.update(deltaTime)
-            physics.update(deltaTime)
+            physics.update(subStepDelta)
             physics.resolvePlayerCollisions(remoteColliders)
             physics.teleportIfOutOfBounds(engine.camera)
-            engine.updateProjectiles(deltaTime, physics, remoteColliders)
+            engine.updateProjectiles(subStepDelta, physics, remoteColliders)
           }
 
           // Update remote players (animation)
-          remotePlayers.update(deltaTime * STEPS_PER_FRAME)
+          remotePlayers.update(rawDeltaTime)
 
           // Broadcast own position
           multiplayer.broadcastPosition(controller.getState())

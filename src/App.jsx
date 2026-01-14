@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { AuthForm } from './components/Auth'
 import { CharacterSelect } from './components/CharacterSelect'
 import { Game } from './components/Game'
+import { VersionManager } from './components/VersionManager'
 import { supabase, signIn, signUp, signOut, getSession, onAuthStateChange } from './lib/supabase'
 import './App.css'
 
@@ -96,6 +97,7 @@ function App() {
 
   return (
     <div className="app">
+      <VersionManager />
       <Game 
         user={user} 
         profile={characterProfile} 

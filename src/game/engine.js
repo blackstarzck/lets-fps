@@ -306,6 +306,8 @@ export class GameEngine {
       old.geometry.dispose()
       old.material.dispose()
     }
+    
+    return sphere
   }
 
   getDeltaTime() {

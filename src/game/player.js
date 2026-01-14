@@ -308,11 +308,11 @@ export class PlayerController {
        // Spawn from character hand or forward if 3rd person
        // Simplify: spawn from player position + forward
        spawnPos = this.physics.collider.end.clone()
-       spawnPos.addScaledVector(this.direction, 1.0)
+       spawnPos.addScaledVector(this.direction, 1.2)
     } else {
        // 1st person: spawn from camera
        spawnPos = this.physics.collider.end.clone()
-       spawnPos.addScaledVector(this.direction, this.physics.collider.radius * 1.5)
+       spawnPos.addScaledVector(this.direction, 0.8) // Increased from 0.525 to 0.8 to avoid self-collision
     }
 
     // Calculate impulse based on charge time
@@ -323,7 +323,8 @@ export class PlayerController {
     velocity.addScaledVector(this.physics.velocity, 2)
 
     // Create local projectile
-    this.engine.createProjectile(spawnPos, velocity, this.projectileColor)
+    const sphere = this.engine.createProjectile(spawnPos, velocity, this.projectileColor)
+    if (sphere) sphere.owner = 'local'
     
     // Broadcast to other players
     if (this.multiplayer) {
