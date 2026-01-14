@@ -19,6 +19,7 @@ export class MultiplayerManager {
     this.onPresenceSync = null
     this.onProjectileSpawn = null
     this.onKick = null
+    this.onRequestState = null
   }
 
   async connect(roomId = 'world-1') {
@@ -33,6 +34,13 @@ export class MultiplayerManager {
     this.channel.on('broadcast', { event: 'player-move' }, (payload) => {
       if (this.onPlayerMove && payload.payload.userId !== this.userId) {
         this.onPlayerMove(payload.payload)
+      }
+    })
+
+    // Listen for state requests (new player joining)
+    this.channel.on('broadcast', { event: 'request-state' }, (payload) => {
+      if (this.onRequestState && payload.payload.userId !== this.userId) {
+        this.onRequestState(payload.payload)
       }
     })
 
@@ -209,6 +217,20 @@ export class MultiplayerManager {
       console.log('Broadcast send status:', status)
     }).catch(err => {
       console.error('Broadcast failed:', err)
+    })
+  }
+
+  requestState() {
+    if (!this.channel) return
+
+    console.log('Requesting game state from other players...')
+    this.channel.send({
+      type: 'broadcast',
+      event: 'request-state',
+      payload: {
+        userId: this.userId,
+        timestamp: Date.now()
+      }
     })
   }
 

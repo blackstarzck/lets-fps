@@ -209,8 +209,18 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           }
         }
 
+        multiplayer.onRequestState = (data) => {
+          console.log('Received state request from:', data.userId)
+          if (controller) {
+            multiplayer.broadcastPosition(controller.getState(), true)
+          }
+        }
+
         await multiplayer.connect()
         setIsConnected(true)
+
+        // Request initial state from existing players
+        multiplayer.requestState()
 
         // Store references
         gameRef.current = {
