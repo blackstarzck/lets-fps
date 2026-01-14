@@ -176,12 +176,16 @@ export class PlayerController {
     }
   }
 
-  setProjectileColor(color) {
-    this.projectileColor = color
-  }
-
   setMultiplayer(multiplayer) {
     this.multiplayer = multiplayer
+  }
+
+  setProjectileColor(color) {
+    this.projectileColor = new THREE.Color(color)
+  }
+
+  applyKnockback(impulse) {
+    this.physics.applyImpulse(new THREE.Vector3(impulse.x, impulse.y, impulse.z))
   }
 
   update(deltaTime) {

@@ -194,6 +194,11 @@ export class PlayerPhysics {
     }
   }
 
+  applyImpulse(impulse) {
+    this.velocity.add(impulse)
+    this.onFloor = false // Lift off floor to reduce friction immediately
+  }
+
   getPosition() {
     return this.collider.end.clone()
   }
@@ -215,41 +220,33 @@ export class PlayerPhysics {
 
   // Handle collision between player and a sphere projectile
   resolveSphereCollision(sphere) {
+    // Use Line3 to find closest point on capsule segment to sphere center
+    const line = new THREE.Line3(this.collider.start, this.collider.end)
+    const closestPoint = new THREE.Vector3()
+    line.closestPointToPoint(sphere.collider.center, true, closestPoint)
+    
     const vector1 = new THREE.Vector3()
     const vector2 = new THREE.Vector3()
     const vector3 = new THREE.Vector3()
 
-    const center = vector1.addVectors(this.collider.start, this.collider.end).multiplyScalar(0.5)
     const sphereCenter = sphere.collider.center
     
     const r = this.collider.radius + sphere.collider.radius
     const r2 = r * r
 
-    // Approximation: check start, end, and center points of capsule
-    for (const point of [this.collider.start, this.collider.end, center]) {
-      const d2 = point.distanceToSquared(sphereCenter)
+    const d2 = closestPoint.distanceToSquared(sphereCenter)
 
-      if (d2 < r2) {
-        const normal = vector1.copy(point).sub(sphereCenter).normalize().negate() // Direction from sphere to player point? 
-        // Logic from sample: vector1.subVectors(point, sphere_center).normalize() -> Vector from Sphere to Player Point (if point is player)
-        // Wait, sample logic: normal = vector1.subVectors(point, sphere_center).normalize()
-        // point is on player capsule. sphere_center is sphere.
-        // So normal is direction from Sphere -> Player.
-        
-        // Re-implementing exactly as sample code for safety:
-        // const normal = vector1.subVectors( point, sphere_center ).normalize();
-        
-        const normalVector = new THREE.Vector3().subVectors(point, sphereCenter).normalize()
-        
-        const v1 = vector2.copy(normalVector).multiplyScalar(normalVector.dot(this.velocity))
-        const v2 = vector3.copy(normalVector).multiplyScalar(normalVector.dot(sphere.velocity))
+    if (d2 < r2) {
+      const normalVector = new THREE.Vector3().subVectors(closestPoint, sphereCenter).normalize()
+      
+      const v1 = vector2.copy(normalVector).multiplyScalar(normalVector.dot(this.velocity))
+      const v2 = vector3.copy(normalVector).multiplyScalar(normalVector.dot(sphere.velocity))
 
-        this.velocity.add(v2).sub(v1)
-        sphere.velocity.add(v1).sub(v2)
+      this.velocity.add(v2).sub(v1)
+      sphere.velocity.add(v1).sub(v2)
 
-        const d = (r - Math.sqrt(d2)) / 2
-        sphereCenter.addScaledVector(normalVector, -d)
-      }
+      const d = (r - Math.sqrt(d2)) / 2
+      sphereCenter.addScaledVector(normalVector, -d)
     }
   }
 }

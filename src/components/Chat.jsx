@@ -3,6 +3,7 @@ import './Chat.css'
 
 export function Chat({ messages, onSendMessage, players, isMaster, onKickPlayer }) {
   const [inputValue, setInputValue] = useState('')
+  const [chatColor, setChatColor] = useState('#a5b4fc') // Default color
   const [isExpanded, setIsExpanded] = useState(false)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
@@ -14,7 +15,7 @@ export function Chat({ messages, onSendMessage, players, isMaster, onKickPlayer 
   const handleSubmit = (e) => {
     e.preventDefault()
     if (inputValue.trim()) {
-      onSendMessage(inputValue)
+      onSendMessage(inputValue, chatColor)
       setInputValue('')
     }
   }
@@ -54,6 +55,13 @@ export function Chat({ messages, onSendMessage, players, isMaster, onKickPlayer 
       </div>
 
       <form onSubmit={handleSubmit} className="chat-input-form">
+        <input
+          type="color"
+          value={chatColor}
+          onChange={(e) => setChatColor(e.target.value)}
+          className="chat-color-picker"
+          title="Change name color"
+        />
         <input
           ref={inputRef}
           type="text"

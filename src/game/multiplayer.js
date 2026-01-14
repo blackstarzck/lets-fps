@@ -20,6 +20,7 @@ export class MultiplayerManager {
     this.onProjectileSpawn = null
     this.onKick = null
     this.onRequestState = null
+    this.onKnockback = null
   }
 
   async connect(roomId = 'world-1') {
@@ -35,6 +36,14 @@ export class MultiplayerManager {
       if (this.onPlayerMove && payload.payload.userId !== this.userId) {
         this.onPlayerMove(payload.payload)
       }
+    })
+
+    // Listen for knockback events
+    this.channel.on('broadcast', { event: 'player-knockback' }, (payload) => {
+        // Only process if I am the target
+        if (this.onKnockback && payload.payload.targetUserId === this.userId) {
+            this.onKnockback(payload.payload)
+        }
     })
 
     // Listen for state requests (new player joining)
@@ -230,6 +239,21 @@ export class MultiplayerManager {
       console.log('Broadcast send status:', status)
     }).catch(err => {
       console.error('Broadcast failed:', err)
+    })
+  }
+
+  sendKnockback(targetUserId, impulse) {
+    if (!this.channel) return
+
+    this.channel.send({
+        type: 'broadcast',
+        event: 'player-knockback',
+        payload: {
+            targetUserId: targetUserId,
+            shooterId: this.userId,
+            impulse: { x: impulse.x, y: impulse.y, z: impulse.z },
+            timestamp: Date.now()
+        }
     })
   }
 

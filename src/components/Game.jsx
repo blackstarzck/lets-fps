@@ -118,19 +118,19 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
     }
   }
 
-  const handleSendMessage = useCallback((message) => {
+  const handleSendMessage = useCallback((message, color) => {
     if (gameRef.current?.multiplayer) {
-      gameRef.current.multiplayer.sendChatMessage(message, ballColor)
+      gameRef.current.multiplayer.sendChatMessage(message, color)
       // Add own message to chat
       setMessages(prev => [...prev, {
         userId: user.id,
         username,
-        color: ballColor,
+        color: color || profile.color,
         message,
         timestamp: Date.now()
       }])
     }
-  }, [user.id, username, ballColor])
+  }, [user.id, username, profile])
 
   const handleKickPlayer = useCallback((targetUserId) => {
     if (gameRef.current?.multiplayer && isMaster) {
@@ -165,6 +165,34 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         gameRef.current.engine = engine
 
         console.log('Engine initialized')
+
+        // Setup Hit Callback
+        engine.onProjectileHit = (targetUserId, impulse) => {
+            // Find target userId from username (id stored in collider is username)
+            // Wait, remoteColliders in remotePlayers.js sets id: player.username
+            // We need userId to send message.
+            // Let's fix remotePlayers to store userId in collider
+            
+            // Actually, we can look up via activeRemotePlayers map
+            if (gameRef.current?.remotePlayers && gameRef.current?.multiplayer) {
+                const rp = gameRef.current.remotePlayers
+                let targetId = null
+                
+                // Find user by username (inefficient but works for now)
+                // Better: update remotePlayers to pass userId in collider
+                for (const [uid, p] of rp.players) {
+                    if (p.username === targetUserId) {
+                        targetId = uid;
+                        break;
+                    }
+                }
+
+                if (targetId) {
+                    console.log(`Sending knockback to ${targetUserId} (${targetId})`)
+                    gameRef.current.multiplayer.sendKnockback(targetId, impulse)
+                }
+            }
+        }
 
         // Step 2: Load map
         setLoadingStatus('Loading map...')
@@ -329,6 +357,13 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           }
         }
 
+        multiplayer.onKnockback = (data) => {
+            console.log('Received Knockback!', data.impulse)
+            if (controller) {
+                controller.applyKnockback(data.impulse)
+            }
+        }
+
         await multiplayer.connect()
         setIsConnected(true)
 
@@ -366,7 +401,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
             physics.update(deltaTime)
             physics.resolvePlayerCollisions(remoteColliders)
             physics.teleportIfOutOfBounds(engine.camera)
-            engine.updateProjectiles(deltaTime, physics)
+            engine.updateProjectiles(deltaTime, physics, remoteColliders)
           }
 
           // Update remote players (animation)

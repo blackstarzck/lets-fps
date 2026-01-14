@@ -18,6 +18,8 @@ export class GameEngine {
     this.scene = new THREE.Scene()
     this.scene.background = new THREE.Color(0x88ccee)
     this.scene.fog = new THREE.Fog(0x88ccee, 0, 50)
+    
+    this.onProjectileHit = null // Callback for projectile hits
 
     // Camera
     this.camera = new THREE.PerspectiveCamera(
@@ -113,7 +115,7 @@ export class GameEngine {
     this.renderer.render(this.scene, this.camera)
   }
 
-  updateProjectiles(deltaTime, playerPhysics) {
+  updateProjectiles(deltaTime, playerPhysics, remoteColliders = []) {
     const GRAVITY = 30
     
     // 1. Update positions and World Collisions
@@ -139,9 +141,14 @@ export class GameEngine {
       const damping = Math.exp(-1.5 * deltaTime) - 1
       sphere.velocity.addScaledVector(sphere.velocity, damping)
 
-      // Player Collision
+      // Local Player Collision
       if (playerPhysics) {
         playerPhysics.resolveSphereCollision(sphere)
+      }
+
+      // Remote Players Collision
+      if (remoteColliders.length > 0) {
+        this.resolveRemoteCollisions(sphere, remoteColliders)
       }
 
       // Remove if out of bounds OR lifetime expired
@@ -169,6 +176,65 @@ export class GameEngine {
 
     // 2. Sphere-Sphere Collisions
     this.resolveSpheresCollisions()
+  }
+
+  resolveRemoteCollisions(sphere, remoteColliders) {
+    const vector1 = new THREE.Vector3()
+    const vector2 = new THREE.Vector3() // For velocity calculation if needed, but remote players are kinematic here
+    const sphereCenter = sphere.collider.center
+    
+    for (const remote of remoteColliders) {
+        // Skip invalid colliders
+        if (!remote.start || !remote.end) continue
+
+        // Use Line3 to find closest point on capsule segment to sphere center
+        const line = new THREE.Line3(remote.start, remote.end)
+        const closestPoint = new THREE.Vector3()
+        line.closestPointToPoint(sphereCenter, true, closestPoint)
+
+        const r = remote.radius + sphere.collider.radius
+        const r2 = r * r
+        const d2 = closestPoint.distanceToSquared(sphereCenter)
+
+        if (d2 < r2) {
+            // Collision detected!
+            // Normal from Player -> Sphere (to push sphere away)
+            const normal = vector1.subVectors(sphereCenter, closestPoint).normalize()
+            
+            // If sphere is exactly inside line (rare), push up
+            if (normal.lengthSq() === 0) {
+                normal.set(0, 1, 0)
+            }
+
+            // Bounce sphere off player
+            // Remote players are immovable objects (kinematic) from local perspective
+            // v' = v - 2 * (v . n) * n  (Reflection)
+            // But let's add some elasticity/damping like walls
+            
+            const vDotN = sphere.velocity.dot(normal)
+            sphere.velocity.addScaledVector(normal, -vDotN * 1.5) // 1.5 bounce factor
+
+            // Push sphere out
+            const d = Math.sqrt(d2)
+            const overlap = r - d
+            sphereCenter.addScaledVector(normal, overlap)
+
+            // Trigger Knockback Event
+            // Impulse direction is opposite to normal (Sphere -> Player)
+            // Magnitude depends on sphere velocity/mass
+            if (this.onProjectileHit) {
+                // Approximate impulse based on sphere velocity
+                // We use a fixed base impulse for gameplay feel + velocity factor
+                const impulseDir = normal.clone().negate()
+                const impulseMag = 15 + sphere.velocity.length() * 0.5 // Base 15 + half velocity
+                // Add some up-vector to lift them off ground
+                impulseDir.y += 0.5 
+                impulseDir.normalize().multiplyScalar(impulseMag)
+                
+                this.onProjectileHit(remote.id, impulseDir)
+            }
+        }
+    }
   }
 
   resolveSpheresCollisions() {
