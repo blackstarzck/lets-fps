@@ -324,10 +324,7 @@ export class PlayerController {
 
     // Broadcast to other players
     if (this.multiplayer) {
-      console.log('PlayerController calling broadcastProjectile')
       this.multiplayer.broadcastProjectile(spawnPos, velocity, this.projectileColor)
-    } else {
-      console.warn('Multiplayer instance not set in PlayerController')
     }
   }
 

@@ -41,7 +41,6 @@ export class MultiplayerManager {
 
     // Listen for state requests (new player joining)
     this.channel.on('broadcast', { event: 'request-state' }, (payload) => {
-      console.log(`[Multiplayer] Received request-state from ${payload.payload.userId}`)
       if (this.onRequestState && payload.payload.userId !== this.userId) {
         this.onRequestState(payload.payload)
       }
@@ -93,7 +92,7 @@ export class MultiplayerManager {
         leftPresences.forEach(presence => {
           // Just pass the event to Game.jsx to handle debouncing/logic
           if (presence.user_id !== this.userId) {
-             this.onPlayerLeave(presence)
+            this.onPlayerLeave(presence)
           }
         })
       }
@@ -110,7 +109,6 @@ export class MultiplayerManager {
       this.channel.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           clearTimeout(timeoutId)
-          console.log('Successfully subscribed to channel')
           try {
             await this.channel.track({
               user_id: this.userId,
@@ -119,7 +117,6 @@ export class MultiplayerManager {
               model_url: this.profile.modelUrl, // Add modelUrl to presence
               joined_at: new Date().toISOString()
             })
-            console.log('Presence tracked')
           } catch (err) {
             console.error('Failed to track presence:', err)
           }
@@ -153,7 +150,6 @@ export class MultiplayerManager {
 
     if (!moved && !force) return
 
-    if (force) console.log(`[Multiplayer] Broadcasting position (FORCED) for ${this.userId}`)
 
     this.channel.send({
       type: 'broadcast',
@@ -191,7 +187,6 @@ export class MultiplayerManager {
   kickPlayer(targetUserId) {
     if (!this.channel) return
 
-    console.log('Broadcasting kick event for user:', targetUserId)
 
     this.channel.send({
       type: 'broadcast',
@@ -210,7 +205,6 @@ export class MultiplayerManager {
       return
     }
 
-    console.log('Broadcasting projectile:', { position, velocity, color })
 
     this.channel.send({
       type: 'broadcast',
@@ -222,8 +216,7 @@ export class MultiplayerManager {
         color,
         timestamp: Date.now()
       }
-    }).then(status => {
-      console.log('Broadcast send status:', status)
+    }).then(() => {
     }).catch(err => {
       console.error('Broadcast failed:', err)
     })
@@ -234,7 +227,6 @@ export class MultiplayerManager {
   requestState() {
     if (!this.channel) return
 
-    console.log('Requesting game state from other players...')
     this.channel.send({
       type: 'broadcast',
       event: 'request-state',

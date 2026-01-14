@@ -9,7 +9,7 @@ export function VersionManager() {
       try {
         // Append timestamp to bypass browser cache
         const res = await fetch(`/version.json?t=${Date.now()}`, {
-            headers: { 'Cache-Control': 'no-cache' }
+          headers: { 'Cache-Control': 'no-cache' }
         })
         if (!res.ok) return
 
@@ -18,16 +18,14 @@ export function VersionManager() {
 
         // Initialize local version on first load
         if (!versionRef.current) {
-            versionRef.current = serverVersion
-            console.log(`[VersionManager] Current version: ${serverVersion}`)
-            return
+          versionRef.current = serverVersion
+          return
         }
 
         // Check mismatch
         if (versionRef.current !== serverVersion) {
-            console.log(`[VersionManager] New version detected: ${serverVersion}. Reloading...`)
-            // Force reload ignoring cache
-            window.location.reload(true)
+          // Force reload ignoring cache
+          window.location.reload(true)
         }
       } catch (err) {
         // Silent fail (network error, etc)
@@ -41,18 +39,18 @@ export function VersionManager() {
     // Check every 60 seconds
     // Also check on visibility change (when user comes back to tab)
     const interval = setInterval(checkVersion, 60 * 1000)
-    
+
     const handleVisibilityChange = () => {
-        if (document.visibilityState === 'visible') {
-            checkVersion()
-        }
+      if (document.visibilityState === 'visible') {
+        checkVersion()
+      }
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
-        clearInterval(interval)
-        document.removeEventListener('visibilitychange', handleVisibilityChange)
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [])
 

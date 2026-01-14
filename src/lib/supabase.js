@@ -67,19 +67,13 @@ export async function getAllProfiles() {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
-    
+
     if (error || !data || data.length === 0) {
-      // Quietly use fallback if table doesn't exist (PGRST205) or 404
-      if (error && (error.code === 'PGRST205' || error.code === '404')) {
-          console.log('[Supabase] Profiles table not found. Using local fallback data.')
-      } else {
-          console.warn('[Supabase] Failed to fetch profiles, using fallback:', error)
-      }
+      // Use fallback if table doesn't exist or fetch failed
       return FALLBACK_PROFILES
     }
     return data
   } catch (err) {
-    console.warn('[Supabase] Network error fetching profiles, using fallback.')
     return FALLBACK_PROFILES
   }
 }

@@ -14,7 +14,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
   const containerRef = useRef(null)
   const gameRef = useRef(null)
   const animationRef = useRef(null)
-  
+
   const [isLoading, setIsLoading] = useState(true)
   const [isFadingOut, setIsFadingOut] = useState(false)
   const [loadingStatus, setLoadingStatus] = useState('Initializing...')
@@ -35,7 +35,6 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
   // Fetch all profiles on mount
   useEffect(() => {
     getAllProfiles().then(profiles => {
-      console.log('Fetched profiles:', profiles)
       if (profiles && profiles.length > 0) {
         setAllProfiles(profiles)
       } else {
@@ -53,44 +52,44 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
 
     // Create list from all profiles
     let list = allProfiles.map(p => ({
-        userId: p.id,
-        username: p.username || p.display_name || 'Unknown',
-        email: p.email, // Add email
-        isOnline: onlineMap.has(p.id),
-        isSelf: p.id === user.id
+      userId: p.id,
+      username: p.username || p.display_name || 'Unknown',
+      email: p.email, // Add email
+      isOnline: onlineMap.has(p.id),
+      isSelf: p.id === user.id
     }))
 
     // Add any online players not in profiles (guests/temp)
     onlinePlayers.forEach(op => {
-        if (!list.find(p => p.userId === op.userId)) {
-            list.push({
-                userId: op.userId,
-                username: op.username,
-                email: 'Guest', // Default for unknown
-                isOnline: true,
-                isSelf: false
-            })
-        }
+      if (!list.find(p => p.userId === op.userId)) {
+        list.push({
+          userId: op.userId,
+          username: op.username,
+          email: 'Guest', // Default for unknown
+          isOnline: true,
+          isSelf: false
+        })
+      }
     })
-    
+
     // Ensure self is in list if fetch failed
     if (!list.find(p => p.userId === user.id)) {
-        list.push({
-            userId: user.id,
-            username,
-            email: user.email, // Use current user email
-            isOnline: true,
-            isSelf: true
-        })
+      list.push({
+        userId: user.id,
+        username,
+        email: user.email, // Use current user email
+        isOnline: true,
+        isSelf: true
+      })
     }
 
     // Sort: Self first, then Online, then Alphabetical
     return list.sort((a, b) => {
-        if (a.isSelf) return -1
-        if (b.isSelf) return 1
-        if (a.isOnline && !b.isOnline) return -1
-        if (!a.isOnline && b.isOnline) return 1
-        return a.username.localeCompare(b.username)
+      if (a.isSelf) return -1
+      if (b.isSelf) return 1
+      if (a.isOnline && !b.isOnline) return -1
+      if (!a.isOnline && b.isOnline) return 1
+      return a.username.localeCompare(b.username)
     })
   }, [allProfiles, onlinePlayers, user.id, username])
 
@@ -152,7 +151,6 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
 
     async function initGame() {
       try {
-        console.log('Starting game initialization...')
 
         // Clear container first to prevent duplicate canvases
         if (containerRef.current) {
@@ -166,13 +164,11 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         if (!gameRef.current) gameRef.current = {}
         gameRef.current.engine = engine
 
-        console.log('Engine initialized')
 
         // Step 2: Load map
         setLoadingStatus('Loading map...')
         try {
           await engine.loadMap()
-          console.log('Map loaded successfully')
         } catch (error) {
           console.warn('Map load failed, creating placeholder world:', error)
           createPlaceholderWorld(engine)
@@ -180,20 +176,15 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
 
         // Step 3: Initialize physics
         setLoadingStatus('Initializing physics...')
-        console.log('Initializing Physics...')
         physics = new PlayerPhysics(engine.worldOctree)
         // Reset physics to ensure player starts at safe position
         physics.reset()
-        console.log('Physics initialized')
 
         // Step 4: Initialize player controller
         setLoadingStatus('Setting up controls...')
-        console.log('Initializing Controller...')
         controller = new PlayerController(engine.camera, physics, engine.renderer.domElement, engine, profile)
-        console.log('Controls initialized')
 
         // Step 5: Initialize remote players manager
-        console.log('Initializing RemotePlayers...')
         remotePlayers = new RemotePlayersManager(engine.scene)
 
         // Preload models for smooth multiplayer experience
@@ -202,7 +193,6 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
 
         // Step 6: Connect to multiplayer
         setLoadingStatus('Connecting to server...')
-        console.log('Connecting to Multiplayer...')
         multiplayer = new MultiplayerManager(user.id, username, profile)
 
         // Connect controller to multiplayer for projectile sync
@@ -215,7 +205,6 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           if (!activeRemotePlayers) return
 
           if (!activeRemotePlayers.players.has(data.userId)) {
-            console.log('[Game] Adding new player from move:', data.username, data.modelUrl)
             activeRemotePlayers.addPlayer(data.userId, data.username, data.color, data.position, data.model_url || data.modelUrl)
           }
           activeRemotePlayers.updatePlayer(data.userId, data)
@@ -225,23 +214,21 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           // Filter out self
           if (presence.user_id === user.id) return
 
-          console.log('[Game] Player joined:', presence.username)
           const activeRemotePlayers = gameRef.current?.remotePlayers
           const activeController = gameRef.current?.controller
           const pendingLeaves = pendingLeavesRef.current
 
           // Check if this is a re-join (update) from a pending leave
           if (pendingLeaves.has(presence.user_id)) {
-              console.log(`[Game] Player ${presence.username} re-joined (update detected)`)
-              // Cancel the leave
-              clearTimeout(pendingLeaves.get(presence.user_id))
-              pendingLeaves.delete(presence.user_id)
-              
-              // Just update the player model/info
-              if (activeRemotePlayers) {
-                  activeRemotePlayers.addPlayer(presence.user_id, presence.username, presence.color, undefined, presence.model_url || presence.modelUrl)
-              }
-              return // Stop here, no notification
+            // Cancel the leave
+            clearTimeout(pendingLeaves.get(presence.user_id))
+            pendingLeaves.delete(presence.user_id)
+
+            // Just update the player model/info
+            if (activeRemotePlayers) {
+              activeRemotePlayers.addPlayer(presence.user_id, presence.username, presence.color, undefined, presence.model_url || presence.modelUrl)
+            }
+            return // Stop here, no notification
           }
 
           let isNewPlayer = true;
@@ -253,15 +240,14 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
             activeRemotePlayers.addPlayer(presence.user_id, presence.username, presence.color, undefined, presence.model_url || presence.modelUrl)
           }
 
-          console.log(`[Game] Join event for ${presence.username}. New? ${isNewPlayer}, SyncDone? ${initialSyncDoneRef.current}`)
 
           // Always show notification for explicit join events if sync is done
           // OR if it's genuinely a new player we haven't seen before
           if (initialSyncDoneRef.current && isNewPlayer) {
-             // Avoid duplicate join notifications if they happen too close
-             // We can check if we recently showed a join notif for this user?
-             // For now, trust the event.
-             addNotification(`${presence.username} joined the game`, 'join')
+            // Avoid duplicate join notifications if they happen too close
+            // We can check if we recently showed a join notif for this user?
+            // For now, trust the event.
+            addNotification(`${presence.username} joined the game`, 'join')
           }
 
           // Broadcast our position to the new player
@@ -275,27 +261,25 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         }
 
         multiplayer.onPlayerLeave = (presence) => {
-          console.log('[Game] Player leave queued:', presence.user_id)
-          
+
           // Clear any existing pending leave timer for this user to prevent duplicates
           if (pendingLeavesRef.current.has(presence.user_id)) {
-              clearTimeout(pendingLeavesRef.current.get(presence.user_id))
+            clearTimeout(pendingLeavesRef.current.get(presence.user_id))
           }
 
           // Delay leave processing to check for immediate re-join (update)
           const timerId = setTimeout(() => {
-              console.log('[Game] Processing player leave:', presence.user_id)
-              
-              if (gameRef.current?.remotePlayers) {
-                  gameRef.current.remotePlayers.removePlayer(presence.user_id)
-              }
-              
-              // Only show notification after initial sync is complete
-              if (initialSyncDoneRef.current) {
-                addNotification(`${presence.username} left the game`, 'leave')
-              }
-              
-              pendingLeavesRef.current.delete(presence.user_id)
+
+            if (gameRef.current?.remotePlayers) {
+              gameRef.current.remotePlayers.removePlayer(presence.user_id)
+            }
+
+            // Only show notification after initial sync is complete
+            if (initialSyncDoneRef.current) {
+              addNotification(`${presence.username} left the game`, 'leave')
+            }
+
+            pendingLeavesRef.current.delete(presence.user_id)
           }, 200) // 200ms debounce window
 
           pendingLeavesRef.current.set(presence.user_id, timerId)
@@ -306,7 +290,6 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         }
 
         multiplayer.onPresenceSync = (state) => {
-          console.log('[Game] Presence Sync:', state)
           const activeRemotePlayers = gameRef.current?.remotePlayers
 
           const playerList = Object.entries(state)
@@ -325,7 +308,6 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           if (!initialSyncDoneRef.current && activeRemotePlayers) {
             playerList.forEach(({ userId, username, color, modelUrl }) => {
               if (!activeRemotePlayers.players.has(userId)) {
-                console.log(`[Game] Adding existing player from sync: ${username}`)
                 activeRemotePlayers.addPlayer(userId, username, color, undefined, modelUrl)
               }
             })
@@ -337,7 +319,6 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           if (!initialSyncDoneRef.current) {
             setTimeout(() => {
               initialSyncDoneRef.current = true
-              console.log('[Game] Initial presence sync complete - notifications enabled')
             }, 500)
           }
         }
@@ -356,7 +337,6 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
             alert('You have been kicked by the master.')
             onLogout()
           } else {
-            console.log('Another player was kicked:', data.targetUserId)
             remotePlayers.removePlayer(data.targetUserId)
           }
         }
@@ -368,26 +348,26 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         }
 
         multiplayer.onKnockback = (data) => {
-            if (controller) {
-                controller.applyKnockback(data.impulse)
-            }
+          if (controller) {
+            controller.applyKnockback(data.impulse)
+          }
         }
 
         // Setup hit callback
         engine.onProjectileHit = (targetUserId, impulse) => {
-            if (gameRef.current?.remotePlayers && gameRef.current?.multiplayer) {
-                const rp = gameRef.current.remotePlayers
-                let targetId = null
-                for (const [uid, p] of rp.players) {
-                    if (p.username === targetUserId) {
-                        targetId = uid;
-                        break;
-                    }
-                }
-                if (targetId) {
-                    gameRef.current.multiplayer.sendKnockback(targetId, impulse)
-                }
+          if (gameRef.current?.remotePlayers && gameRef.current?.multiplayer) {
+            const rp = gameRef.current.remotePlayers
+            let targetId = null
+            for (const [uid, p] of rp.players) {
+              if (p.username === targetUserId) {
+                targetId = uid;
+                break;
+              }
             }
+            if (targetId) {
+              gameRef.current.multiplayer.sendKnockback(targetId, impulse)
+            }
+          }
         }
 
         await multiplayer.connect()
@@ -415,10 +395,9 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
 
         // Setup unload handler to send leave signal
         const handleBeforeUnload = () => {
-            if (gameRef.current?.multiplayer) {
-                console.log('Unloading/Refreshing - disconnecting multiplayer')
-                gameRef.current.multiplayer.disconnect()
-            }
+          if (gameRef.current?.multiplayer) {
+            gameRef.current.multiplayer.disconnect()
+          }
         }
         window.addEventListener('beforeunload', handleBeforeUnload)
 
@@ -479,7 +458,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
       // handleBeforeUnload removal is skipped as it's defined inside closure, 
       // but browser cleans up event listeners on page unload anyway.
       // For navigation within SPA, we should ideally remove it, but it requires extracting the function.
-      
+
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current)
       }
@@ -503,7 +482,6 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
 
     // Update Controller
     if (controller) {
-      console.log('Updating controller profile:', profile)
       controller.profile = profile
       controller.setProjectileColor(profile.color)
       setBallColor(profile.color)
@@ -520,7 +498,6 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
 
     // Update Multiplayer
     if (multiplayer) {
-      console.log('Updating multiplayer profile:', profile)
       multiplayer.profile = profile
       // Update presence
       if (multiplayer.channel) {

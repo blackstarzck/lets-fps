@@ -12,23 +12,21 @@ export class RemotePlayersManager {
     this.players = new Map() // userId -> { mesh, targetPosition, targetRotation, username, mixer, action }
     this.loader = new GLTFLoader()
     this.modelCache = new Map() // url -> gltf
-    
+
     // Default geometry for loading state
     this.placeholderGeometry = new THREE.CylinderGeometry(0.3, 0.3, 1.8, 16)
     this.placeholderMaterial = new THREE.MeshLambertMaterial({ color: 0x888888 })
   }
 
   async preloadModels() {
-    console.log('Preloading all character models...')
     const promises = MODELS.map(modelDef => {
       const url = STORAGE_URL + modelDef.file
       // Skip if already cached
       if (this.modelCache.has(url)) return Promise.resolve()
-      
+
       return new Promise((resolve) => {
         this.loader.load(url, (gltf) => {
           this.modelCache.set(url, gltf)
-          console.log(`Preloaded: ${modelDef.name}`)
           resolve()
         }, undefined, (err) => {
           console.error(`Failed to preload ${modelDef.name}:`, err)
@@ -37,9 +35,8 @@ export class RemotePlayersManager {
         })
       })
     })
-    
+
     await Promise.all(promises)
-    console.log('All models preloaded')
   }
 
   getPlayerColor(userId) {
@@ -57,18 +54,17 @@ export class RemotePlayersManager {
 
     // Ensure valid numbers for position
     const safePos = {
-        x: Number(initialPosition?.x || 0),
-        y: Number(initialPosition?.y || 0),
-        z: Number(initialPosition?.z || 0)
+      x: Number(initialPosition?.x || 0),
+      y: Number(initialPosition?.y || 0),
+      z: Number(initialPosition?.z || 0)
     }
 
-    console.log(`[RemotePlayers] addPlayer: ${username} (${userId}) at ${JSON.stringify(safePos)}`)
 
     // Create container group
     const playerGroup = new THREE.Group()
     // Adjust Y position to match updatePlayer logic (capsule top -> floor)
     playerGroup.position.set(safePos.x, safePos.y - 1, safePos.z)
-    
+
     // 1. Create Placeholder first
     const placeholder = new THREE.Mesh(this.placeholderGeometry, new THREE.MeshLambertMaterial({ color }))
     placeholder.position.y = 0.9
@@ -97,7 +93,7 @@ export class RemotePlayersManager {
     playerGroup.add(label)
 
     this.scene.add(playerGroup)
-    
+
     // Store player data
     const playerData = {
       mesh: playerGroup,
@@ -112,7 +108,7 @@ export class RemotePlayersManager {
       justJoined: true, // Flag for initial teleport
       placeholder // Keep reference to remove later
     }
-    
+
     this.players.set(userId, playerData)
 
     // 2. Load GLB Model if URL provided
@@ -122,17 +118,15 @@ export class RemotePlayersManager {
 
     // Force visible for debugging
     playerGroup.visible = true
-    console.log(`[RemotePlayers] Player ${username} added to scene at ${JSON.stringify(playerGroup.position)}`)
   }
 
   async loadPlayerModel(userId, modelFile, colorHex) {
-    console.log(`[RemotePlayers] loadPlayerModel called for ${userId}, file: ${modelFile}`)
     try {
       // Find model definition
       const modelDef = MODELS.find(m => m.file === modelFile)
-      
+
       if (!modelDef) {
-          console.warn(`[RemotePlayers] Model definition not found for file: ${modelFile}. Available models:`, MODELS.map(m => m.file))
+        console.warn(`[RemotePlayers] Model definition not found for file: ${modelFile}. Available models:`, MODELS.map(m => m.file))
       }
 
       const yOffset = modelDef ? (modelDef.yOffset || 0) : 0
@@ -140,48 +134,43 @@ export class RemotePlayersManager {
 
       // Construct full URL from filename
       const url = modelFile.startsWith('http') ? modelFile : STORAGE_URL + modelFile
-      console.log(`[RemotePlayers] Loading GLTF from: ${url}`)
-      
+
       let gltf = this.modelCache.get(url)
-      
+
       if (!gltf) {
-        console.log(`[RemotePlayers] Model not cached, fetching...`)
         gltf = await new Promise((resolve, reject) => {
           this.loader.load(url, resolve, undefined, reject)
         })
         this.modelCache.set(url, gltf)
-        console.log(`[RemotePlayers] Model fetched and cached: ${url}`)
       } else {
-        console.log(`[RemotePlayers] Using cached model: ${url}`)
       }
 
       const player = this.players.get(userId)
       if (!player) {
-          console.warn(`[RemotePlayers] Player ${userId} left before model loaded`)
-          return 
+        console.warn(`[RemotePlayers] Player ${userId} left before model loaded`)
+        return
       }
 
       // Update player yOffset and radius
       player.yOffset = yOffset
       player.radius = radius
 
-      console.log(`[RemotePlayers] Applying model to player ${userId}, yOffset: ${yOffset}`)
 
       // Clone the model properly using SkeletonUtils for SkinnedMesh support
       const model = SkeletonUtils.clone(gltf.scene)
-      
+
       // Apply color/tint to meshes if possible
       const color = new THREE.Color(colorHex)
       model.traverse((child) => {
         if (child.isMesh) {
           child.castShadow = true
           child.receiveShadow = true
-          
+
           // Clone material to avoid affecting other players
           if (child.material) {
             child.material = child.material.clone()
             // Apply tint if texture exists, or set color
-            child.material.color.set(color) 
+            child.material.color.set(color)
           }
         }
       })
@@ -202,34 +191,33 @@ export class RemotePlayersManager {
       // Animation Setup
       if (gltf.animations && gltf.animations.length > 0) {
         player.mixer = new THREE.AnimationMixer(model)
-        
+
         // Try to find Idle and Run animations
         // If the model only has one animation (e.g. running), use it
         // Or check animation names
         gltf.animations.forEach((clip) => {
-            const action = player.mixer.clipAction(clip)
-            player.actions[clip.name] = action
-            // console.log(`Loaded animation: ${clip.name} for ${player.username}`)
+          const action = player.mixer.clipAction(clip)
+          player.actions[clip.name] = action
+          // console.log(`Loaded animation: ${clip.name} for ${player.username}`)
         })
-        
+
         // Play first animation by default (usually Idle or the only one)
         const firstClip = gltf.animations[0]
         if (firstClip) {
-             player.actions[firstClip.name].play()
+          player.actions[firstClip.name].play()
         }
       }
 
       // Swap placeholder with model
       player.mesh.add(model)
       player.model = model // Save reference
-      
+
       // Remove placeholder now that model is loaded
       if (player.placeholder) {
         player.mesh.remove(player.placeholder)
         player.placeholder = null
       }
-      
-      console.log(`[RemotePlayers] Model successfully attached to player ${userId}`)
+
 
     } catch (error) {
       console.error(`[RemotePlayers] Failed to load model for ${userId}:`, error)
@@ -245,7 +233,7 @@ export class RemotePlayersManager {
 
     context.fillStyle = 'rgba(0, 0, 0, 0.5)'
     context.fillRect(0, 0, canvas.width, canvas.height)
-    
+
     context.font = 'bold 32px Arial'
     context.fillStyle = 'white'
     context.textAlign = 'center'
@@ -266,9 +254,9 @@ export class RemotePlayersManager {
 
     // Ensure valid numbers for state position
     const safePos = {
-        x: Number(state.position?.x || 0),
-        y: Number(state.position?.y || 0),
-        z: Number(state.position?.z || 0)
+      x: Number(state.position?.x || 0),
+      y: Number(state.position?.y || 0),
+      z: Number(state.position?.z || 0)
     }
 
     // Debug update position
@@ -276,21 +264,20 @@ export class RemotePlayersManager {
 
     // Make visible on first update if it was hidden
     if (!player.mesh.visible) player.mesh.visible = true;
-    
+
     // Check if we need to load/update model
     if (state.modelUrl && state.modelUrl !== player.modelUrl) {
-        console.log(`Model update detected for ${player.username}: ${player.modelUrl} -> ${state.modelUrl}`)
-        player.modelUrl = state.modelUrl
-        // Remove old model if exists (but keep placeholder for now)
-        if (player.model) {
-            player.mesh.remove(player.model)
-            player.model = null
-        }
-        // Load new model
-        this.loadPlayerModel(userId, state.modelUrl, state.color || '#ffffff')
+      player.modelUrl = state.modelUrl
+      // Remove old model if exists (but keep placeholder for now)
+      if (player.model) {
+        player.mesh.remove(player.model)
+        player.model = null
+      }
+      // Load new model
+      this.loadPlayerModel(userId, state.modelUrl, state.color || '#ffffff')
     } else if (player.modelUrl && !player.model) {
-        // Retry loading model if url exists but model is missing
-        this.loadPlayerModel(userId, player.modelUrl, state.color || '#ffffff')
+      // Retry loading model if url exists but model is missing
+      this.loadPlayerModel(userId, player.modelUrl, state.color || '#ffffff')
     }
 
     // Update target position for interpolation
@@ -314,22 +301,22 @@ export class RemotePlayersManager {
     if (!player) return
 
     this.scene.remove(player.mesh)
-    
+
     // Dispose resources
     if (player.mixer) {
-        player.mixer.stopAllAction()
+      player.mixer.stopAllAction()
     }
-    
+
     player.mesh.traverse((child) => {
       if (child.isMesh) {
-          if (child.geometry) child.geometry.dispose()
-          if (child.material) {
-              if (Array.isArray(child.material)) {
-                  child.material.forEach(m => m.dispose())
-              } else {
-                  child.material.dispose()
-              }
+        if (child.geometry) child.geometry.dispose()
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach(m => m.dispose())
+          } else {
+            child.material.dispose()
           }
+        }
       }
     })
 
@@ -348,39 +335,39 @@ export class RemotePlayersManager {
         player.justJoined = false
       } else {
         player.mesh.position.lerp(player.targetPosition, LERP_FACTOR)
-        
+
         // Rotation interpolation (Y axis only)
         const currentY = player.mesh.rotation.y
         let targetY = player.targetRotation.y
-        
+
         // Shortest path interpolation for angle
         const delta = targetY - currentY
         if (delta > Math.PI) targetY -= Math.PI * 2
         if (delta < -Math.PI) targetY += Math.PI * 2
-        
+
         player.mesh.rotation.y += (targetY - currentY) * LERP_FACTOR
       }
 
       // Update Animation
       if (player.mixer) {
-          player.mixer.update(deltaTime)
-          
-          // Simple state machine
-          // Note: Needs valid animation names from the GLB files
-          // For now, just play whatever is there, maybe speed up if moving
-          
-          // Example: if there's an action named 'Run' and 'Idle'
-          // const runAction = player.actions['Run']
-          // const idleAction = player.actions['Idle']
-          // if (runAction && idleAction) {
-          //     if (player.isMoving) {
-          //         runAction.play()
-          //         idleAction.stop()
-          //     } else {
-          //         idleAction.play()
-          //         runAction.stop()
-          //     }
-          // }
+        player.mixer.update(deltaTime)
+
+        // Simple state machine
+        // Note: Needs valid animation names from the GLB files
+        // For now, just play whatever is there, maybe speed up if moving
+
+        // Example: if there's an action named 'Run' and 'Idle'
+        // const runAction = player.actions['Run']
+        // const idleAction = player.actions['Idle']
+        // if (runAction && idleAction) {
+        //     if (player.isMoving) {
+        //         runAction.play()
+        //         idleAction.stop()
+        //     } else {
+        //         idleAction.play()
+        //         runAction.stop()
+        //     }
+        // }
       }
     })
   }
@@ -394,21 +381,21 @@ export class RemotePlayersManager {
     this.players.forEach((player) => {
       // Validate position
       if (
-          isNaN(player.mesh.position.x) || 
-          isNaN(player.mesh.position.y) || 
-          isNaN(player.mesh.position.z) ||
-          !isFinite(player.mesh.position.x) ||
-          !isFinite(player.mesh.position.y) ||
-          !isFinite(player.mesh.position.z)
+        isNaN(player.mesh.position.x) ||
+        isNaN(player.mesh.position.y) ||
+        isNaN(player.mesh.position.z) ||
+        !isFinite(player.mesh.position.x) ||
+        !isFinite(player.mesh.position.y) ||
+        !isFinite(player.mesh.position.z)
       ) {
-          console.warn(`[RemotePlayers] Skipping collider for ${player.username} - Invalid position:`, player.mesh.position);
-          return;
+        console.warn(`[RemotePlayers] Skipping collider for ${player.username} - Invalid position:`, player.mesh.position);
+        return;
       }
 
       // Create segment for capsule
       const radius = player.radius || 0.35
       const height = 1.8 // Standard height
-      
+
       // Capsule segment starts at radius up and ends at height-radius up
       const start = new THREE.Vector3(player.mesh.position.x, player.mesh.position.y + radius, player.mesh.position.z)
       const end = new THREE.Vector3(player.mesh.position.x, player.mesh.position.y + height - radius, player.mesh.position.z)
@@ -426,12 +413,7 @@ export class RemotePlayersManager {
   }
 
   debugScene() {
-    console.log(`[RemotePlayers] Debug - Scene UUID: ${this.scene.uuid}, Children: ${this.scene.children.length}, Players: ${this.players.size}`)
-    this.players.forEach((p, id) => {
-        const worldPos = new THREE.Vector3()
-        p.mesh.getWorldPosition(worldPos)
-        console.log(`[RemotePlayers] Player ${p.username} (${id}): Vis=${p.mesh.visible}, LocalPos=${JSON.stringify(p.mesh.position)}, WorldPos=${JSON.stringify(worldPos)}, InScene=${this.scene.children.includes(p.mesh)}`)
-    })
+    // Debug method - no-op in production
   }
 
   dispose() {

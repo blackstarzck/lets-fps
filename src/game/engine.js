@@ -71,13 +71,11 @@ export class GameEngine {
 
   async loadMap(path = '/models/gltf/collision-world.glb') {
     return new Promise((resolve, reject) => {
-      console.log(`Attempting to load map from: ${path}`)
       const loader = new GLTFLoader()
 
       loader.load(
         path,
         (gltf) => {
-          console.log('GLTF loaded successfully')
           this.scene.add(gltf.scene)
           this.worldOctree.fromGraphNode(gltf.scene)
 
@@ -95,7 +93,6 @@ export class GameEngine {
           resolve(gltf.scene)
         },
         (xhr) => {
-          console.log((xhr.loaded / xhr.total * 100) + '% loaded')
         },
         (error) => {
           console.error('Failed to load map:', error)
@@ -156,13 +153,7 @@ export class GameEngine {
       const age = now - sphere.spawnTime
       const isExpired = sphere.spawnTime && (age > sphere.lifetime)
 
-      // Debug log every 5 seconds
-      if (Math.floor(age / 1000) % 5 === 0 && Math.floor(age) % 60 === 0) {
-        console.log(`Projectile ID ${i} age: ${age.toFixed(1)}ms / ${sphere.lifetime}ms`)
-      }
-
       if (sphere.collider.center.y < -50 || isExpired) {
-        if (isExpired) console.log('Projectile expired and removed')
         this.scene.remove(sphere)
         sphere.geometry.dispose()
         sphere.material.dispose()
@@ -274,7 +265,6 @@ export class GameEngine {
     // Lifetime - 40 seconds
     sphere.spawnTime = performance.now()
     sphere.lifetime = 40000 // 40 seconds in ms
-    console.log('Projectile created with lifetime:', sphere.lifetime, 'spawnTime:', sphere.spawnTime)
 
     // Sync mesh with collider
     sphere.position.copy(position)
