@@ -14,7 +14,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
   const containerRef = useRef(null)
   const gameRef = useRef(null)
   const animationRef = useRef(null)
-  
+
   const [isLoading, setIsLoading] = useState(true)
   const [isFadingOut, setIsFadingOut] = useState(false)
   const [loadingStatus, setLoadingStatus] = useState('Initializing...')
@@ -51,44 +51,44 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
 
     // Create list from all profiles
     let list = allProfiles.map(p => ({
-        userId: p.id,
-        username: p.username || p.display_name || 'Unknown',
-        email: p.email, // Add email
-        isOnline: onlineMap.has(p.id),
-        isSelf: p.id === user.id
+      userId: p.id,
+      username: p.username || p.display_name || 'Unknown',
+      email: p.email, // Add email
+      isOnline: onlineMap.has(p.id),
+      isSelf: p.id === user.id
     }))
 
     // Add any online players not in profiles (guests/temp)
     onlinePlayers.forEach(op => {
-        if (!list.find(p => p.userId === op.userId)) {
-            list.push({
-                userId: op.userId,
-                username: op.username,
-                email: 'Guest', // Default for unknown
-                isOnline: true,
-                isSelf: false
-            })
-        }
+      if (!list.find(p => p.userId === op.userId)) {
+        list.push({
+          userId: op.userId,
+          username: op.username,
+          email: 'Guest', // Default for unknown
+          isOnline: true,
+          isSelf: false
+        })
+      }
     })
-    
+
     // Ensure self is in list if fetch failed
     if (!list.find(p => p.userId === user.id)) {
-        list.push({
-            userId: user.id,
-            username,
-            email: user.email, // Use current user email
-            isOnline: true,
-            isSelf: true
-        })
+      list.push({
+        userId: user.id,
+        username,
+        email: user.email, // Use current user email
+        isOnline: true,
+        isSelf: true
+      })
     }
 
     // Sort: Self first, then Online, then Alphabetical
     return list.sort((a, b) => {
-        if (a.isSelf) return -1
-        if (b.isSelf) return 1
-        if (a.isOnline && !b.isOnline) return -1
-        if (!a.isOnline && b.isOnline) return 1
-        return a.username.localeCompare(b.username)
+      if (a.isSelf) return -1
+      if (b.isSelf) return 1
+      if (a.isOnline && !b.isOnline) return -1
+      if (!a.isOnline && b.isOnline) return 1
+      return a.username.localeCompare(b.username)
     })
   }, [allProfiles, onlinePlayers, user.id, username])
 
@@ -166,33 +166,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
 
         console.log('Engine initialized')
 
-        // Setup Hit Callback
-        engine.onProjectileHit = (targetUserId, impulse) => {
-            // Find target userId from username (id stored in collider is username)
-            // Wait, remoteColliders in remotePlayers.js sets id: player.username
-            // We need userId to send message.
-            // Let's fix remotePlayers to store userId in collider
-            
-            // Actually, we can look up via activeRemotePlayers map
-            if (gameRef.current?.remotePlayers && gameRef.current?.multiplayer) {
-                const rp = gameRef.current.remotePlayers
-                let targetId = null
-                
-                // Find user by username (inefficient but works for now)
-                // Better: update remotePlayers to pass userId in collider
-                for (const [uid, p] of rp.players) {
-                    if (p.username === targetUserId) {
-                        targetId = uid;
-                        break;
-                    }
-                }
-
-                if (targetId) {
-                    console.log(`Sending knockback to ${targetUserId} (${targetId})`)
-                    gameRef.current.multiplayer.sendKnockback(targetId, impulse)
-                }
-            }
-        }
+        // Projectile hit callback disabled - no knockback system
 
         // Step 2: Load map
         setLoadingStatus('Loading map...')
@@ -305,7 +279,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
               const presence = presences[0]
               if (presence) {
                 const modelUrl = presence.model_url || presence.modelUrl
-                
+
                 // Pre-create remote player (hidden until position sync)
                 if (activeRemotePlayers) {
                   activeRemotePlayers.addPlayer(
@@ -357,12 +331,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           }
         }
 
-        multiplayer.onKnockback = (data) => {
-            console.log('Received Knockback!', data.impulse)
-            if (controller) {
-                controller.applyKnockback(data.impulse)
-            }
-        }
+        // Knockback handler disabled - players don't get pushed by projectiles
 
         await multiplayer.connect()
         setIsConnected(true)
@@ -387,7 +356,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           remotePlayers
         }
 
-          // Start game loop
+        // Start game loop
         let frameCount = 0
         function gameLoop() {
           if (!isRunning) return
@@ -560,8 +529,8 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
                       {player.isOnline ? '●' : '○'}
                     </span>
                     <div className="player-info-text">
-                        <span className="player-name-text">{player.username}</span>
-                        {player.email && <span className="player-email-text">{player.email}</span>}
+                      <span className="player-name-text">{player.username}</span>
+                      {player.email && <span className="player-email-text">{player.email}</span>}
                     </div>
                     {isMaster && player.isOnline && !player.isSelf && (
                       <button
@@ -623,7 +592,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
             </div>
           </div>
 
-            <Chat
+          <Chat
             messages={messages}
             onSendMessage={handleSendMessage}
             players={onlinePlayers} // Use only online players for chat count? Or full list? Usually online.

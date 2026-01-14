@@ -10,7 +10,7 @@ export class MultiplayerManager {
     this.channel = null
     this.lastBroadcastTime = 0
     this.lastPosition = { x: 0, y: 0, z: 0 }
-    
+
     // Callbacks
     this.onPlayerJoin = null
     this.onPlayerLeave = null
@@ -20,7 +20,6 @@ export class MultiplayerManager {
     this.onProjectileSpawn = null
     this.onKick = null
     this.onRequestState = null
-    this.onKnockback = null
   }
 
   async connect(roomId = 'world-1') {
@@ -38,13 +37,7 @@ export class MultiplayerManager {
       }
     })
 
-    // Listen for knockback events
-    this.channel.on('broadcast', { event: 'player-knockback' }, (payload) => {
-        // Only process if I am the target
-        if (this.onKnockback && payload.payload.targetUserId === this.userId) {
-            this.onKnockback(payload.payload)
-        }
-    })
+
 
     // Listen for state requests (new player joining)
     this.channel.on('broadcast', { event: 'request-state' }, (payload) => {
@@ -102,11 +95,11 @@ export class MultiplayerManager {
           // Check if this user is still in the state (meaning it was just an update, not a leave)
           const userId = presence.user_id
           const isStillHere = Object.keys(currentState).includes(userId)
-          
+
           if (!isStillHere) {
-             this.onPlayerLeave(presence)
+            this.onPlayerLeave(presence)
           } else {
-             console.log(`[Multiplayer] User ${userId} updated presence (ignored leave event)`)
+            console.log(`[Multiplayer] User ${userId} updated presence (ignored leave event)`)
           }
         })
       }
@@ -150,7 +143,7 @@ export class MultiplayerManager {
     if (!this.channel) return
 
     const now = performance.now()
-    
+
     // Throttle broadcasts, unless forced
     if (!force && now - this.lastBroadcastTime < BROADCAST_INTERVAL_MS) {
       return
@@ -159,7 +152,7 @@ export class MultiplayerManager {
     // Only broadcast if position changed significantly, unless forced
     const pos = state.position
     const threshold = 0.01
-    const moved = 
+    const moved =
       Math.abs(pos.x - this.lastPosition.x) > threshold ||
       Math.abs(pos.y - this.lastPosition.y) > threshold ||
       Math.abs(pos.z - this.lastPosition.z) > threshold
@@ -205,7 +198,7 @@ export class MultiplayerManager {
     if (!this.channel) return
 
     console.log('Broadcasting kick event for user:', targetUserId)
-    
+
     this.channel.send({
       type: 'broadcast',
       event: 'kick-event',
@@ -224,7 +217,7 @@ export class MultiplayerManager {
     }
 
     console.log('Broadcasting projectile:', { position, velocity, color })
-    
+
     this.channel.send({
       type: 'broadcast',
       event: 'projectile-spawn',
@@ -242,20 +235,7 @@ export class MultiplayerManager {
     })
   }
 
-  sendKnockback(targetUserId, impulse) {
-    if (!this.channel) return
 
-    this.channel.send({
-        type: 'broadcast',
-        event: 'player-knockback',
-        payload: {
-            targetUserId: targetUserId,
-            shooterId: this.userId,
-            impulse: { x: impulse.x, y: impulse.y, z: impulse.z },
-            timestamp: Date.now()
-        }
-    })
-  }
 
   requestState() {
     if (!this.channel) return

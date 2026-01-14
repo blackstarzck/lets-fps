@@ -9,7 +9,7 @@ export class GameEngine {
     this.worldOctree = new Octree()
     this.projectiles = []
     this.isMapLoaded = false
-    
+
     this.init()
   }
 
@@ -18,7 +18,7 @@ export class GameEngine {
     this.scene = new THREE.Scene()
     this.scene.background = new THREE.Color(0x88ccee)
     this.scene.fog = new THREE.Fog(0x88ccee, 0, 50)
-    
+
     this.onProjectileHit = null // Callback for projectile hits
 
     // Camera
@@ -73,7 +73,7 @@ export class GameEngine {
     return new Promise((resolve, reject) => {
       console.log(`Attempting to load map from: ${path}`)
       const loader = new GLTFLoader()
-      
+
       loader.load(
         path,
         (gltf) => {
@@ -117,7 +117,7 @@ export class GameEngine {
 
   updateProjectiles(deltaTime, playerPhysics, remoteColliders = []) {
     const GRAVITY = 30
-    
+
     // 1. Update positions and World Collisions
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const sphere = this.projectiles[i]
@@ -155,7 +155,7 @@ export class GameEngine {
       const now = performance.now()
       const age = now - sphere.spawnTime
       const isExpired = sphere.spawnTime && (age > sphere.lifetime)
-      
+
       // Debug log every 5 seconds
       if (Math.floor(age / 1000) % 5 === 0 && Math.floor(age) % 60 === 0) {
         console.log(`Projectile ID ${i} age: ${age.toFixed(1)}ms / ${sphere.lifetime}ms`)
@@ -169,7 +169,7 @@ export class GameEngine {
         this.projectiles.splice(i, 1)
         continue
       }
-      
+
       // Update mesh position
       sphere.position.copy(sphere.collider.center)
     }
@@ -182,63 +182,46 @@ export class GameEngine {
     const vector1 = new THREE.Vector3()
     const vector2 = new THREE.Vector3() // For velocity calculation if needed, but remote players are kinematic here
     const sphereCenter = sphere.collider.center
-    
+
     for (const remote of remoteColliders) {
-        // Skip invalid colliders
-        if (!remote.start || !remote.end) continue
+      // Skip invalid colliders
+      if (!remote.start || !remote.end) continue
 
-        // Use Line3 to find closest point on capsule segment to sphere center
-        const line = new THREE.Line3(remote.start, remote.end)
-        const closestPoint = new THREE.Vector3()
-        line.closestPointToPoint(sphereCenter, true, closestPoint)
+      // Use Line3 to find closest point on capsule segment to sphere center
+      const line = new THREE.Line3(remote.start, remote.end)
+      const closestPoint = new THREE.Vector3()
+      line.closestPointToPoint(sphereCenter, true, closestPoint)
 
-        const r = remote.radius + sphere.collider.radius
-        const r2 = r * r
-        const d2 = closestPoint.distanceToSquared(sphereCenter)
+      const r = remote.radius + sphere.collider.radius
+      const r2 = r * r
+      const d2 = closestPoint.distanceToSquared(sphereCenter)
 
-        if (d2 < r2) {
-            // Collision detected!
-            // Normal from Player -> Sphere (to push sphere away)
-            const normal = vector1.subVectors(sphereCenter, closestPoint).normalize()
-            
-            // If sphere is exactly inside line (rare), push up
-            if (normal.lengthSq() === 0) {
-                normal.set(0, 1, 0)
-            }
+      if (d2 < r2) {
+        // Collision detected!
+        // Normal from Player -> Sphere (to push sphere away)
+        const normal = vector1.subVectors(sphereCenter, closestPoint).normalize()
 
-            // Bounce sphere off player
-            // Remote players are immovable objects (kinematic) from local perspective
-            // v' = v - 2 * (v . n) * n  (Reflection)
-            // But let's add some elasticity/damping like walls
-            
-            const vDotN = sphere.velocity.dot(normal)
-            sphere.velocity.addScaledVector(normal, -vDotN * 1.5) // 1.5 bounce factor
-
-            // Push sphere out
-            const d = Math.sqrt(d2)
-            const overlap = r - d
-            sphereCenter.addScaledVector(normal, overlap)
-
-            // Trigger Knockback Event
-            // Impulse direction is opposite to normal (Sphere -> Player)
-            // Magnitude depends on sphere velocity/mass
-            if (this.onProjectileHit && !sphere.hitSet.has(remote.id)) {
-                sphere.hitSet.add(remote.id) // Mark this player as hit by this sphere
-
-                // Approximate impulse based on sphere velocity
-                // We use a fixed base impulse for gameplay feel + velocity factor
-                const impulseDir = normal.clone().negate()
-                // Cap velocity contribution to avoid crazy knockback
-                const speed = Math.min(sphere.velocity.length(), 50) 
-                const impulseMag = 15 + speed * 0.5 
-                
-                // Add some up-vector to lift them off ground
-                impulseDir.y += 0.5 
-                impulseDir.normalize().multiplyScalar(impulseMag)
-                
-                this.onProjectileHit(remote.id, impulseDir)
-            }
+        // If sphere is exactly inside line (rare), push up
+        if (normal.lengthSq() === 0) {
+          normal.set(0, 1, 0)
         }
+
+        // Bounce sphere off player
+        // Remote players are immovable objects (kinematic) from local perspective
+        // v' = v - 2 * (v . n) * n  (Reflection)
+        // But let's add some elasticity/damping like walls
+
+        const vDotN = sphere.velocity.dot(normal)
+        sphere.velocity.addScaledVector(normal, -vDotN * 1.5) // 1.5 bounce factor
+
+        // Push sphere out
+        const d = Math.sqrt(d2)
+        const overlap = r - d
+        sphereCenter.addScaledVector(normal, overlap)
+
+        // Track hit for visual feedback (no knockback)
+        sphere.hitSet.add(remote.id)
+      }
     }
   }
 
@@ -279,26 +262,26 @@ export class GameEngine {
     const geometry = new THREE.IcosahedronGeometry(radius, 5)
     const material = new THREE.MeshLambertMaterial({ color: color || 0xffff00 })
     const sphere = new THREE.Mesh(geometry, material)
-    
+
     sphere.castShadow = true
     sphere.receiveShadow = true
-    
+
     // Physics properties
     sphere.collider = new THREE.Sphere(position.clone(), radius)
     sphere.velocity = velocity.clone()
     sphere.hitSet = new Set() // Track players hit by this projectile
-    
+
     // Lifetime - 40 seconds
     sphere.spawnTime = performance.now()
     sphere.lifetime = 40000 // 40 seconds in ms
     console.log('Projectile created with lifetime:', sphere.lifetime, 'spawnTime:', sphere.spawnTime)
-    
+
     // Sync mesh with collider
     sphere.position.copy(position)
 
     this.scene.add(sphere)
     this.projectiles.push(sphere)
-    
+
     // Limit number of projectiles
     if (this.projectiles.length > 100) {
       const old = this.projectiles.shift()
@@ -306,7 +289,7 @@ export class GameEngine {
       old.geometry.dispose()
       old.material.dispose()
     }
-    
+
     return sphere
   }
 
