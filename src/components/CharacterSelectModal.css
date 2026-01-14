@@ -4,7 +4,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.8);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   display: flex;
@@ -24,6 +24,15 @@
   position: relative;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-content.wide-modal {
+  max-width: 900px;
+  height: 600px; /* Fixed height for consistent layout */
+  padding: 0; /* Remove padding to let content fill */
+  overflow: hidden;
 }
 
 .close-btn {
@@ -42,6 +51,7 @@
   justify-content: center;
   transition: all 0.2s;
   font-size: 18px;
+  z-index: 10;
 }
 
 .close-btn:hover {
@@ -51,157 +61,169 @@
 }
 
 .modal-header {
-  text-align: center;
+  padding: 32px 32px 0 32px;
   margin-bottom: 24px;
 }
 
 .modal-header h2 {
   color: #fff;
-  font-size: 1.5rem;
+  font-size: 1.8rem;
   margin: 0 0 8px 0;
+  font-weight: 700;
+  letter-spacing: -0.5px;
 }
 
 .modal-header p {
   color: rgba(255, 255, 255, 0.6);
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 1rem;
+}
+
+/* Layout for Wide Modal */
+.modal-body-row {
+  display: flex;
+  flex: 1;
+  overflow: hidden; /* Prevent body scroll */
+  padding: 0 32px 32px 32px;
+  gap: 32px;
 }
 
 .modal-section {
-  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-section h3 {
   color: rgba(255, 255, 255, 0.9);
-  font-size: 1rem;
-  margin-bottom: 12px;
-  font-weight: 500;
+  font-size: 0.9rem;
+  margin-bottom: 16px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
-/* Reusing grid styles but scoped to modal */
-.modal-models-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+/* Left Column: Model List */
+.left-col {
+  width: 35%;
+  min-width: 250px;
+  display: flex;
+  flex-direction: column;
 }
 
-.modal-model-card {
-  aspect-ratio: 1;
+.modal-models-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 8px; /* Space for scrollbar */
+}
+
+.modal-models-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.modal-models-list::-webkit-scrollbar-track {
   background: rgba(255, 255, 255, 0.05);
-  border: 2px solid transparent;
+  border-radius: 3px;
+}
+
+.modal-models-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.modal-model-item {
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+}
+
+.modal-model-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateX(4px);
+}
+
+.modal-model-item.active {
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.2) 0%, rgba(99, 102, 241, 0.05) 100%);
+  border-color: #6366f1;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+}
+
+.model-name {
+  color: #fff;
+  font-weight: 500;
+  font-size: 1rem;
+}
+
+.modal-model-item.active .model-name {
+  color: #818cf8;
+  font-weight: 600;
+}
+
+.check-mark {
+  color: #4ade80;
+  font-weight: bold;
+}
+
+/* Right Column: Preview */
+.right-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.canvas-container {
+  flex: 1;
+  background: radial-gradient(circle at center, #2a2a40 0%, #16213e 100%);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.3);
   position: relative;
   overflow: hidden;
 }
 
-.modal-model-card:hover {
-  background: rgba(255, 255, 255, 0.1);
-  transform: translateY(-2px);
+.preview-canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
 }
 
-.modal-model-card.active {
-  border-color: #667eea;
-  background: rgba(102, 126, 234, 0.1);
-}
-
-.modal-model-preview {
+/* Footer */
+.modal-footer {
+  padding: 0 32px 32px 32px;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 0.8rem;
-  font-weight: 500;
-}
-
-.modal-color-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 8px;
-}
-
-.modal-color-btn {
-  width: 100%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  cursor: pointer;
-  transition: transform 0.2s, border-color 0.2s;
-  padding: 0;
-}
-
-.modal-color-btn:hover {
-  transform: scale(1.1);
-}
-
-.modal-color-btn.active {
-  transform: scale(1.15);
-  border-color: #fff;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
-}
-
-.modal-preview-area {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 16px;
-  padding: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 24px;
+  justify-content: flex-end;
 }
 
 .save-btn {
-  width: 100%;
-  padding: 14px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 14px 40px;
+  background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
   border: none;
   border-radius: 12px;
   color: #fff;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
 }
 
 .save-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 8px 25px rgba(99, 102, 241, 0.4);
 }
 
 .save-btn:disabled {
   opacity: 0.7;
   cursor: not-allowed;
   transform: none;
-}
-
-.character-preview {
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
-  transition: background-color 0.3s ease;
-  position: relative;
-}
-
-.preview-face {
-  display: flex;
-  gap: 12px;
-}
-
-.preview-eye {
-  width: 12px;
-  height: 12px;
-  background: #fff;
-  border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 @keyframes fadeIn {

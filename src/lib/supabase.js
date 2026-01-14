@@ -18,7 +18,9 @@ export async function signUp(email, password, username) {
       data: {
         username,
         display_name: username
-      }
+      },
+      // Redirect back to the current domain after email confirmation
+      emailRedirectTo: window.location.origin
     }
   })
   return { data, error }
