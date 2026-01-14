@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import './CharacterSelect.css'
 
-const COLORS = [
+export const COLORS = [
   { name: 'Red', value: '#ef4444' },
   { name: 'Orange', value: '#f97316' },
   { name: 'Amber', value: '#f59e0b' },
@@ -19,7 +19,7 @@ const COLORS = [
   { name: 'Rose', value: '#f43f5e' }
 ]
 
-const MODELS = [
+export const MODELS = [
   { name: 'Runner', file: 'Meshy_AI_Animation_Running_withSkin.glb' },
   { name: 'Purple Girl', file: 'Meshy_AI_purple_girly_grown_up_0113234503_texture.glb' },
   { name: 'Sunflower', file: 'Meshy_AI_Sunflower_Circle_Brea_0113234457_texture.glb' }

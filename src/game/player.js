@@ -1,6 +1,8 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
+const STORAGE_URL = 'https://hgczujipznppjguxzkor.supabase.co/storage/v1/object/public/models/'
+
 export class PlayerController {
   constructor(camera, physics, domElement, engine, profile) {
     this.camera = camera
@@ -39,8 +41,11 @@ export class PlayerController {
     }
   }
 
-  async loadModel(url, colorHex) {
+  async loadModel(modelFile, colorHex) {
     try {
+      // Construct full URL from filename
+      const url = modelFile.startsWith('http') ? modelFile : STORAGE_URL + modelFile
+      
       const gltf = await new Promise((resolve, reject) => {
         this.loader.load(url, resolve, undefined, reject)
       })
@@ -286,6 +291,15 @@ export class PlayerController {
     velocity.addScaledVector(this.physics.velocity, 2)
 
     this.engine.createProjectile(spawnPos, velocity, this.projectileColor)
+  }
+
+  getState() {
+    const pos = this.physics.getPosition()
+    return {
+      position: { x: pos.x, y: pos.y, z: pos.z },
+      rotation: { y: this.camera.rotation.y },
+      isMoving: this.isMoving
+    }
   }
 
   dispose() {

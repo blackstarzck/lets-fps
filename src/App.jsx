@@ -73,8 +73,14 @@ function App() {
     setCharacterProfile(null)
   }
 
-  const handleChangeCharacter = () => {
-    setCharacterProfile(null)
+  const handleChangeCharacter = (newProfile) => {
+    // If newProfile is provided (from modal), update it
+    // Otherwise, reset to null to show character select screen
+    if (newProfile) {
+      setCharacterProfile(newProfile)
+    } else {
+      setCharacterProfile(null)
+    }
   }
 
   if (loading) {

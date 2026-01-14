@@ -6,6 +6,7 @@ import { PlayerController } from '../game/player'
 import { MultiplayerManager } from '../game/multiplayer'
 import { RemotePlayersManager } from '../game/remotePlayers'
 import { Chat } from './Chat'
+import { CharacterSelectModal } from './CharacterSelectModal'
 import './Game.css'
 
 export function Game({ user, profile, onLogout, onChangeCharacter }) {
@@ -20,6 +21,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
   const [isConnected, setIsConnected] = useState(false)
   const [isThirdPerson, setIsThirdPerson] = useState(false)
   const [ballColor, setBallColor] = useState(profile?.color || '#ffff00')
+  const [showCharacterModal, setShowCharacterModal] = useState(false)
 
   const username = user.user_metadata?.username || user.email?.split('@')[0] || 'Player'
 
@@ -215,7 +217,47 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
       // Clear refs
       gameRef.current = null
     }
-  }, [user.id, username, profile])
+  }, [user.id, username]) // Removed profile to prevent re-init on change
+
+  // Handle profile updates dynamically
+  useEffect(() => {
+    if (!gameRef.current || !profile) return
+    
+    const { controller, multiplayer, engine } = gameRef.current
+    
+    // Update Controller
+    if (controller) {
+      console.log('Updating controller profile:', profile)
+      controller.profile = profile
+      controller.setProjectileColor(profile.color)
+      setBallColor(profile.color)
+      
+      // Reload model if changed
+      if (controller.model) {
+         engine.scene.remove(controller.model)
+         controller.model = null
+      }
+      if (profile.modelUrl) {
+        controller.loadModel(profile.modelUrl, profile.color)
+      }
+    }
+    
+    // Update Multiplayer
+    if (multiplayer) {
+      console.log('Updating multiplayer profile:', profile)
+      multiplayer.profile = profile
+      // Update presence
+      if (multiplayer.channel) {
+        multiplayer.channel.track({
+          user_id: user.id,
+          username: username,
+          color: profile.color,
+          model_url: profile.modelUrl,
+          joined_at: new Date().toISOString()
+        }).catch(err => console.error('Failed to update presence:', err))
+      }
+    }
+  }, [profile, user.id, username])
 
 
   return (
@@ -242,7 +284,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
                 </span>
               </div>
               <div className="hud-controls">
-                <button onClick={onChangeCharacter} className="secondary-btn">
+                <button onClick={() => setShowCharacterModal(true)} className="secondary-btn">
                   Change Character
                 </button>
                 <button onClick={onLogout} className="logout-btn">
@@ -286,6 +328,20 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
             onSendMessage={handleSendMessage}
             players={[{ userId: user.id, username }, ...players]}
           />
+          
+          {showCharacterModal && (
+            <CharacterSelectModal
+              currentProfile={profile}
+              onClose={() => setShowCharacterModal(false)}
+              onSelect={(newProfile) => {
+                // Update App state via callback
+                if (onChangeCharacter) {
+                  onChangeCharacter(newProfile)
+                }
+                setShowCharacterModal(false)
+              }}
+            />
+          )}
         </>
       )}
     </div>

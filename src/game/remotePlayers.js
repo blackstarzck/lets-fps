@@ -1,6 +1,8 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
+const STORAGE_URL = 'https://hgczujipznppjguxzkor.supabase.co/storage/v1/object/public/models/'
+
 // Interpolation factor for smooth movement
 const LERP_FACTOR = 0.15
 
@@ -68,8 +70,11 @@ export class RemotePlayersManager {
     }
   }
 
-  async loadPlayerModel(userId, url, colorHex) {
+  async loadPlayerModel(userId, modelFile, colorHex) {
     try {
+      // Construct full URL from filename
+      const url = modelFile.startsWith('http') ? modelFile : STORAGE_URL + modelFile
+      
       let gltf = this.modelCache.get(url)
       
       if (!gltf) {
