@@ -45,7 +45,7 @@ export function Chat({ messages, onSendMessage, players, isMaster, onKickPlayer 
         ) : (
           messages.map((msg, index) => (
             <div key={index} className="chat-message">
-              <span className="chat-username">{msg.username}:</span>
+              <span className="chat-username" style={{ color: msg.color || '#a5b4fc' }}>{msg.username}:</span>
               <span className="chat-text">{msg.message}</span>
             </div>
           ))

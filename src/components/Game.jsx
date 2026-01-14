@@ -125,11 +125,12 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
       setMessages(prev => [...prev, {
         userId: user.id,
         username,
+        color: profile.color,
         message,
         timestamp: Date.now()
       }])
     }
-  }, [user.id, username])
+  }, [user.id, username, profile])
 
   const handleKickPlayer = useCallback((targetUserId) => {
     if (gameRef.current?.multiplayer && isMaster) {

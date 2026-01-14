@@ -185,6 +185,7 @@ export class MultiplayerManager {
       payload: {
         userId: this.userId,
         username: this.username,
+        color: this.profile.color,
         message: message.trim(),
         timestamp: Date.now()
       }
