@@ -160,10 +160,20 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           const activeController = gameRef.current?.controller
           const activeMultiplayer = gameRef.current?.multiplayer
           
+          let isNewPlayer = true;
           if (activeRemotePlayers) {
+              // Check if player already exists
+              if (activeRemotePlayers.players.has(presence.user_id)) {
+                  isNewPlayer = false;
+              }
               activeRemotePlayers.addPlayer(presence.user_id, presence.username, presence.color, undefined, presence.model_url || presence.modelUrl)
           }
-          addNotification(`${presence.username} joined the game`, 'join')
+          
+          if (isNewPlayer) {
+              addNotification(`${presence.username} joined the game`, 'join')
+          } else {
+              console.log(`[Game] Player ${presence.username} updated (ignored join notification)`)
+          }
           
           // Broadcast our position to the new player with a slight delay
           if (activeController) {
@@ -387,6 +397,11 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           color: profile.color,
           model_url: profile.modelUrl,
           joined_at: new Date().toISOString()
+        }).then(() => {
+            // Force broadcast position to ensure others update the model immediately
+            if (controller) {
+                multiplayer.broadcastPosition(controller.getState(), true)
+            }
         }).catch(err => console.error('Failed to update presence:', err))
       }
     }
