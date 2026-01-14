@@ -98,7 +98,10 @@ export class RemotePlayersManager {
     // If initial position is default (0,0,0) and likely from join event without pos data,
     // hide player until first update to avoid spawn clustering
     if (initialPosition.x === 0 && initialPosition.y === 0 && initialPosition.z === 0) {
+        console.log(`Player ${username} (${userId}) created at 0,0,0 - hiding until update`)
         playerGroup.visible = false
+    } else {
+        console.log(`Player ${username} (${userId}) created at valid pos - visible`)
     }
   }
 
@@ -215,6 +218,7 @@ export class RemotePlayersManager {
 
     // Make visible on first update if it was hidden
     if (!player.mesh.visible) {
+        console.log(`Player ${player.username} (${userId}) received first update - making visible`)
         player.mesh.visible = true
     }
 

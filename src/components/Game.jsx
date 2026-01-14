@@ -188,10 +188,25 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         multiplayer.onPresenceSync = (state) => {
           const playerList = Object.entries(state)
             .filter(([id]) => id !== user.id)
-            .map(([id, presences]) => ({
-              userId: id,
-              username: presences[0]?.username || 'Unknown'
-            }))
+            .map(([id, presences]) => {
+              const presence = presences[0]
+              if (presence) {
+                // Pre-create remote player (hidden until position sync)
+                if (remotePlayers) {
+                    remotePlayers.addPlayer(
+                        id, 
+                        presence.username, 
+                        presence.color, 
+                        undefined, // Initial position unknown -> defaults to 0,0,0 -> hidden
+                        presence.model_url || presence.modelUrl
+                    )
+                }
+              }
+              return {
+                userId: id,
+                username: presence?.username || 'Unknown'
+              }
+            })
           setPlayers(playerList)
         }
 
