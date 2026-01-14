@@ -34,6 +34,15 @@ export class PlayerController {
     this.cameraOffset = new THREE.Vector3(0, 2, -4) // Behind and up
     this.currentCameraPosition = new THREE.Vector3()
     
+    // Bind handlers for removal
+    this.onKeyDown = this.onKeyDown.bind(this)
+    this.onKeyUp = this.onKeyUp.bind(this)
+    this.onMouseDown = this.onMouseDown.bind(this)
+    this.onMouseUp = this.onMouseUp.bind(this)
+    this.onMouseMove = this.onMouseMove.bind(this)
+    this.onPointerLockChange = this.onPointerLockChange.bind(this)
+    this.requestPointerLock = this.requestPointerLock.bind(this)
+
     this.setupEventListeners()
     
     // Load own character model if url exists
@@ -88,50 +97,53 @@ export class PlayerController {
   }
 
   setupEventListeners() {
-    // Keyboard events
-    document.addEventListener('keydown', (e) => {
-      this.keyStates[e.code] = true
-    })
-    
-    document.addEventListener('keyup', (e) => {
-      this.keyStates[e.code] = false
-    })
+    document.addEventListener('keydown', this.onKeyDown)
+    document.addEventListener('keyup', this.onKeyUp)
+    document.addEventListener('mousedown', this.onMouseDown)
+    document.addEventListener('mouseup', this.onMouseUp)
+    document.addEventListener('mousemove', this.onMouseMove)
+    document.addEventListener('pointerlockchange', this.onPointerLockChange)
+    this.domElement.addEventListener('click', this.requestPointerLock)
+  }
 
-    // Mouse events for shooting
-    document.addEventListener('mousedown', (e) => {
-      if (this.isLocked && e.button === 0) { // Left click
-        this.mouseTime = performance.now()
-      }
-    })
+  onKeyDown(e) {
+    this.keyStates[e.code] = true
+  }
 
-    document.addEventListener('mouseup', (e) => {
-      if (this.isLocked && e.button === 0) { // Left click release
-        this.shoot()
-      }
-    })
+  onKeyUp(e) {
+    this.keyStates[e.code] = false
+  }
 
-    // Mouse look
-    document.addEventListener('mousemove', (e) => {
-      if (document.pointerLockElement === this.domElement) {
-        this.camera.rotation.y -= e.movementX / 500
-        this.camera.rotation.x -= e.movementY / 500
-        
-        // Clamp vertical rotation
-        this.camera.rotation.x = Math.max(
-          -Math.PI / 2,
-          Math.min(Math.PI / 2, this.camera.rotation.x)
-        )
-      }
-    })
+  onMouseDown(e) {
+    if (this.isLocked && e.button === 0) {
+      this.mouseTime = performance.now()
+    }
+  }
 
-    // Pointer lock
-    this.domElement.addEventListener('click', () => {
-      this.domElement.requestPointerLock()
-    })
+  onMouseUp(e) {
+    if (this.isLocked && e.button === 0) {
+      this.shoot()
+    }
+  }
 
-    document.addEventListener('pointerlockchange', () => {
-      this.isLocked = document.pointerLockElement === this.domElement
-    })
+  onMouseMove(e) {
+    if (document.pointerLockElement === this.domElement) {
+      this.camera.rotation.y -= e.movementX / 500
+      this.camera.rotation.x -= e.movementY / 500
+      
+      this.camera.rotation.x = Math.max(
+        -Math.PI / 2,
+        Math.min(Math.PI / 2, this.camera.rotation.x)
+      )
+    }
+  }
+
+  onPointerLockChange() {
+    this.isLocked = document.pointerLockElement === this.domElement
+  }
+
+  requestPointerLock() {
+    this.domElement.requestPointerLock()
   }
 
   getForwardVector() {
@@ -300,7 +312,10 @@ export class PlayerController {
     
     // Broadcast to other players
     if (this.multiplayer) {
+      console.log('PlayerController calling broadcastProjectile')
       this.multiplayer.broadcastProjectile(spawnPos, velocity, this.projectileColor)
+    } else {
+      console.warn('Multiplayer instance not set in PlayerController')
     }
   }
 
@@ -314,6 +329,12 @@ export class PlayerController {
   }
 
   dispose() {
-    // Event listeners will be garbage collected with the document
+    document.removeEventListener('keydown', this.onKeyDown)
+    document.removeEventListener('keyup', this.onKeyUp)
+    document.removeEventListener('mousedown', this.onMouseDown)
+    document.removeEventListener('mouseup', this.onMouseUp)
+    document.removeEventListener('mousemove', this.onMouseMove)
+    document.removeEventListener('pointerlockchange', this.onPointerLockChange)
+    this.domElement.removeEventListener('click', this.requestPointerLock)
   }
 }

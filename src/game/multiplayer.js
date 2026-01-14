@@ -24,7 +24,7 @@ export class MultiplayerManager {
     this.channel = supabase.channel(roomId, {
       config: {
         presence: { key: this.userId },
-        broadcast: { ack: false, self: false }
+        broadcast: { ack: false, self: true } // Enable self-receive for debugging
       }
     })
 
@@ -42,12 +42,26 @@ export class MultiplayerManager {
       }
     })
 
+    // Listen for ALL broadcasts for debugging
+    this.channel.on('broadcast', { event: '*' }, (payload) => {
+      console.log('DEBUG: Received broadcast event:', payload.event, payload)
+    })
+
     // Listen for projectile spawns
     this.channel.on('broadcast', { event: 'projectile-spawn' }, (payload) => {
-      console.log('Received projectile-spawn broadcast:', payload)
-      if (this.onProjectileSpawn && payload.payload.userId !== this.userId) {
-        console.log('Calling onProjectileSpawn callback with:', payload.payload)
+      console.log('Received projectile-spawn broadcast (Raw):', payload)
+      
+      // Ignore own messages if self: true (unless debugging)
+      if (payload.payload.userId === this.userId) {
+        console.log('Ignoring own projectile broadcast')
+        return
+      }
+
+      if (this.onProjectileSpawn) {
+        console.log('Calling onProjectileSpawn callback')
         this.onProjectileSpawn(payload.payload)
+      } else {
+        console.warn('onProjectileSpawn callback is NOT set!')
       }
     })
 
@@ -166,7 +180,10 @@ export class MultiplayerManager {
   }
 
   broadcastProjectile(position, velocity, color) {
-    if (!this.channel) return
+    if (!this.channel) {
+      console.warn('Cannot broadcast projectile: No channel')
+      return
+    }
 
     console.log('Broadcasting projectile:', { position, velocity, color })
     
@@ -180,6 +197,10 @@ export class MultiplayerManager {
         color,
         timestamp: Date.now()
       }
+    }).then(status => {
+      console.log('Broadcast send status:', status)
+    }).catch(err => {
+      console.error('Broadcast failed:', err)
     })
   }
 

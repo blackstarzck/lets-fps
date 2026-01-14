@@ -154,6 +154,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         }
 
         // Handle remote projectile spawns
+        console.log('Setting up onProjectileSpawn handler')
         multiplayer.onProjectileSpawn = (data) => {
           console.log('Game.jsx: onProjectileSpawn called with:', data)
           if (engine) {

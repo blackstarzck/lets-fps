@@ -149,11 +149,13 @@ export class GameEngine {
       const age = now - sphere.spawnTime
       const isExpired = sphere.spawnTime && (age > sphere.lifetime)
       
-      if (isExpired) {
-        console.log('Projectile expired. Age:', age, 'Lifetime:', sphere.lifetime)
+      // Debug log every 5 seconds
+      if (Math.floor(age / 1000) % 5 === 0 && Math.floor(age) % 60 === 0) {
+        console.log(`Projectile ID ${i} age: ${age.toFixed(1)}ms / ${sphere.lifetime}ms`)
       }
-      
+
       if (sphere.collider.center.y < -50 || isExpired) {
+        if (isExpired) console.log('Projectile expired and removed')
         this.scene.remove(sphere)
         sphere.geometry.dispose()
         sphere.material.dispose()
