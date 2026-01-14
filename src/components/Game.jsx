@@ -8,7 +8,7 @@ import { RemotePlayersManager } from '../game/remotePlayers'
 import { Chat } from './Chat'
 import './Game.css'
 
-export function Game({ user, profile, onLogout }) {
+export function Game({ user, profile, onLogout, onChangeCharacter }) {
   const containerRef = useRef(null)
   const gameRef = useRef(null)
   const animationRef = useRef(null)
@@ -18,8 +18,26 @@ export function Game({ user, profile, onLogout }) {
   const [messages, setMessages] = useState([])
   const [players, setPlayers] = useState([])
   const [isConnected, setIsConnected] = useState(false)
+  const [isThirdPerson, setIsThirdPerson] = useState(false)
+  const [ballColor, setBallColor] = useState(profile?.color || '#ffff00')
 
   const username = user.user_metadata?.username || user.email?.split('@')[0] || 'Player'
+
+  const handleTogglePerspective = () => {
+    if (gameRef.current?.controller) {
+      const newMode = !isThirdPerson
+      setIsThirdPerson(newMode)
+      gameRef.current.controller.setPerspective(newMode)
+    }
+  }
+
+  const handleBallColorChange = (e) => {
+    const color = e.target.value
+    setBallColor(color)
+    if (gameRef.current?.controller) {
+      gameRef.current.controller.setProjectileColor(color)
+    }
+  }
 
   const handleSendMessage = useCallback((message) => {
     if (gameRef.current?.multiplayer) {
@@ -98,14 +116,16 @@ export function Game({ user, profile, onLogout }) {
         // Set up multiplayer callbacks
         multiplayer.onPlayerMove = (data) => {
           if (!remotePlayers.players.has(data.userId)) {
-            remotePlayers.addPlayer(data.userId, data.username, data.color, data.position)
+            // Pass modelUrl and color from data
+            remotePlayers.addPlayer(data.userId, data.username, data.color, data.position, data.model_url || data.modelUrl)
           }
           remotePlayers.updatePlayer(data.userId, data)
         }
 
         multiplayer.onPlayerJoin = (presence) => {
           console.log('Player joined:', presence.username)
-          remotePlayers.addPlayer(presence.user_id, presence.username, presence.color)
+          // Ensure we pass model_url from presence
+          remotePlayers.addPlayer(presence.user_id, presence.username, presence.color, undefined, presence.model_url || presence.modelUrl)
         }
 
         multiplayer.onPlayerLeave = (presence) => {
@@ -156,8 +176,8 @@ export function Game({ user, profile, onLogout }) {
             engine.updateProjectiles(deltaTime, physics)
           }
 
-          // Update remote players
-          remotePlayers.update()
+          // Update remote players (animation)
+          remotePlayers.update(deltaTime * STEPS_PER_FRAME)
 
           // Broadcast own position
           multiplayer.broadcastPosition(controller.getState())
@@ -221,9 +241,14 @@ export function Game({ user, profile, onLogout }) {
                   {isConnected ? '● Connected' : '○ Disconnected'}
                 </span>
               </div>
-              <button onClick={onLogout} className="logout-btn">
-                Logout
-              </button>
+              <div className="hud-controls">
+                <button onClick={onChangeCharacter} className="secondary-btn">
+                  Change Character
+                </button>
+                <button onClick={onLogout} className="logout-btn">
+                  Logout
+                </button>
+              </div>
             </div>
 
             <div className="hud-center">
@@ -232,6 +257,27 @@ export function Game({ user, profile, onLogout }) {
 
             <div className="hud-instructions">
               Click to start • WASD to move • SPACE to jump • ESC to unlock mouse
+            </div>
+
+            <div className="hud-settings">
+              <div className="setting-item">
+                <span className="setting-label">View:</span>
+                <button 
+                  className={`view-btn ${isThirdPerson ? 'active' : ''}`}
+                  onClick={handleTogglePerspective}
+                >
+                  {isThirdPerson ? '3rd Person' : '1st Person'}
+                </button>
+              </div>
+              <div className="setting-item">
+                <span className="setting-label">Ball Color:</span>
+                <input 
+                  type="color" 
+                  value={ballColor}
+                  onChange={handleBallColorChange}
+                  className="color-picker"
+                />
+              </div>
             </div>
           </div>
 

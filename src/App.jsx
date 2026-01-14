@@ -13,14 +13,31 @@ function App() {
   useEffect(() => {
     // Check initial session
     getSession().then(({ session }) => {
-      setUser(session?.user || null)
+      const currentUser = session?.user || null
+      setUser(currentUser)
+      
+      // Check if user has character profile in metadata
+      if (currentUser?.user_metadata?.has_character) {
+        setCharacterProfile({
+          color: currentUser.user_metadata.color,
+          modelUrl: currentUser.user_metadata.model_url
+        })
+      }
+      
       setLoading(false)
     })
 
     // Listen for auth changes
     const { data: { subscription } } = onAuthStateChange((_event, session) => {
-      setUser(session?.user || null)
-      if (!session) {
+      const currentUser = session?.user || null
+      setUser(currentUser)
+      
+      if (currentUser?.user_metadata?.has_character) {
+        setCharacterProfile({
+          color: currentUser.user_metadata.color,
+          modelUrl: currentUser.user_metadata.model_url
+        })
+      } else {
         setCharacterProfile(null)
       }
     })
@@ -56,6 +73,10 @@ function App() {
     setCharacterProfile(null)
   }
 
+  const handleChangeCharacter = () => {
+    setCharacterProfile(null)
+  }
+
   if (loading) {
     return (
       <div className="app-loading">
@@ -87,7 +108,8 @@ function App() {
       <Game 
         user={user} 
         profile={characterProfile} 
-        onLogout={handleLogout} 
+        onLogout={handleLogout}
+        onChangeCharacter={handleChangeCharacter}
       />
     </div>
   )

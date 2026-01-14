@@ -86,6 +86,7 @@ export class MultiplayerManager {
               user_id: this.userId,
               username: this.username,
               color: this.profile.color,
+              model_url: this.profile.modelUrl, // Add modelUrl to presence
               joined_at: new Date().toISOString()
             })
             console.log('Presence tracked')
@@ -129,6 +130,7 @@ export class MultiplayerManager {
         userId: this.userId,
         username: this.username,
         color: this.profile.color,
+        modelUrl: this.profile.modelUrl, // Add modelUrl to broadcast
         ...state,
         timestamp: Date.now()
       }
