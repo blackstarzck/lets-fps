@@ -157,10 +157,21 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           remotePlayers.addPlayer(presence.user_id, presence.username, presence.color, undefined, presence.model_url || presence.modelUrl)
           addNotification(`${presence.username} joined the game`, 'join')
           
-          // Immediately broadcast our position to the new player
+          // Broadcast our position to the new player with a slight delay
+          // to ensure they are ready to receive
           if (controller) {
             console.log('Broadcasting initial position to new player')
-            multiplayer.broadcastPosition(controller.getState(), true)
+            setTimeout(() => {
+                if (gameRef.current?.multiplayer) {
+                    gameRef.current.multiplayer.broadcastPosition(controller.getState(), true)
+                }
+            }, 500)
+            // Send again to be safe
+            setTimeout(() => {
+                if (gameRef.current?.multiplayer) {
+                    gameRef.current.multiplayer.broadcastPosition(controller.getState(), true)
+                }
+            }, 1500)
           }
         }
 
@@ -219,8 +230,16 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         await multiplayer.connect()
         setIsConnected(true)
 
-        // Request initial state from existing players
-        multiplayer.requestState()
+        // Request initial state from existing players with retries
+        const requestStateWithRetry = () => {
+            if (gameRef.current?.multiplayer) {
+                gameRef.current.multiplayer.requestState()
+            }
+        }
+        
+        requestStateWithRetry()
+        setTimeout(requestStateWithRetry, 1000)
+        setTimeout(requestStateWithRetry, 2000)
 
         // Store references
         gameRef.current = {

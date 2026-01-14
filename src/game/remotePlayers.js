@@ -94,6 +94,12 @@ export class RemotePlayersManager {
     if (modelUrl) {
       this.loadPlayerModel(userId, modelUrl, color)
     }
+
+    // If initial position is default (0,0,0) and likely from join event without pos data,
+    // hide player until first update to avoid spawn clustering
+    if (initialPosition.x === 0 && initialPosition.y === 0 && initialPosition.z === 0) {
+        playerGroup.visible = false
+    }
   }
 
   async loadPlayerModel(userId, modelFile, colorHex) {
@@ -206,6 +212,11 @@ export class RemotePlayersManager {
   updatePlayer(userId, state) {
     const player = this.players.get(userId)
     if (!player) return
+
+    // Make visible on first update if it was hidden
+    if (!player.mesh.visible) {
+        player.mesh.visible = true
+    }
 
     // Update target position for interpolation
     player.targetPosition.set(
