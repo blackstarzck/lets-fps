@@ -37,7 +37,6 @@ export function Chat({ messages, onSendMessage, players, isMaster, onKickPlayer 
     <div className={`chat-container ${isExpanded ? 'expanded' : ''}`}>
       <div className="chat-header">
         <span className="chat-title">💬 Chat</span>
-        <span className="player-count">👥 {players.length} online</span>
       </div>
 
       <div className="chat-messages">
@@ -70,31 +69,6 @@ export function Chat({ messages, onSendMessage, players, isMaster, onKickPlayer 
           Send
         </button>
       </form>
-
-      {isExpanded && (
-        <div className="chat-players">
-          <div className="players-title">Online Players:</div>
-          {players.map((player, index) => (
-            <div key={index} className="player-item">
-              <span className="player-name">{player.username}</span>
-              {isMaster && index > 0 && ( // First player is self, don't show kick button
-                <button 
-                  className="kick-btn"
-                  onClick={(e) => {
-                    e.stopPropagation() // Prevent chat collapse
-                    if (window.confirm(`Are you sure you want to kick ${player.username}?`)) {
-                      onKickPlayer(player.userId)
-                    }
-                  }}
-                  title="Kick player"
-                >
-                  🚫
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }

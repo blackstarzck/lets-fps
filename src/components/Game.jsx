@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import * as THREE from 'three'
 import { GameEngine } from '../game/engine'
 import { PlayerPhysics, STEPS_PER_FRAME } from '../game/physics'
@@ -7,6 +7,7 @@ import { MultiplayerManager } from '../game/multiplayer'
 import { RemotePlayersManager } from '../game/remotePlayers'
 import { Chat } from './Chat'
 import { CharacterSelectModal } from './CharacterSelectModal'
+import { getAllProfiles } from '../lib/supabase'
 import './Game.css'
 
 export function Game({ user, profile, onLogout, onChangeCharacter }) {
@@ -18,7 +19,8 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
   const [isFadingOut, setIsFadingOut] = useState(false)
   const [loadingStatus, setLoadingStatus] = useState('Initializing...')
   const [messages, setMessages] = useState([])
-  const [players, setPlayers] = useState([])
+  const [onlinePlayers, setOnlinePlayers] = useState([])
+  const [allProfiles, setAllProfiles] = useState([])
   const [isConnected, setIsConnected] = useState(false)
   const [isThirdPerson, setIsThirdPerson] = useState(false)
   const [ballColor, setBallColor] = useState(profile?.color || '#ffff00')
@@ -28,10 +30,72 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
   const username = user.user_metadata?.username || user.email?.split('@')[0] || 'Player'
   const isMaster = user.email === 'bucheongosok@gmail.com'
 
+  // Fetch all profiles on mount
+  useEffect(() => {
+    getAllProfiles().then(profiles => {
+      console.log('Fetched profiles:', profiles)
+      if (profiles && profiles.length > 0) {
+        setAllProfiles(profiles)
+      } else {
+        // Fallback if no profiles table: at least show current user
+        setAllProfiles([{ id: user.id, username, ...profile }])
+      }
+    })
+  }, [])
+
+  // Merge profiles with online status
+  const playerList = useMemo(() => {
+    // Map of online user IDs
+    const onlineMap = new Set(onlinePlayers.map(p => p.userId))
+    onlineMap.add(user.id) // Self is always online
+
+    // Create list from all profiles
+    let list = allProfiles.map(p => ({
+        userId: p.id,
+        username: p.username || p.display_name || 'Unknown',
+        email: p.email, // Add email
+        isOnline: onlineMap.has(p.id),
+        isSelf: p.id === user.id
+    }))
+
+    // Add any online players not in profiles (guests/temp)
+    onlinePlayers.forEach(op => {
+        if (!list.find(p => p.userId === op.userId)) {
+            list.push({
+                userId: op.userId,
+                username: op.username,
+                email: 'Guest', // Default for unknown
+                isOnline: true,
+                isSelf: false
+            })
+        }
+    })
+    
+    // Ensure self is in list if fetch failed
+    if (!list.find(p => p.userId === user.id)) {
+        list.push({
+            userId: user.id,
+            username,
+            email: user.email, // Use current user email
+            isOnline: true,
+            isSelf: true
+        })
+    }
+
+    // Sort: Self first, then Online, then Alphabetical
+    return list.sort((a, b) => {
+        if (a.isSelf) return -1
+        if (b.isSelf) return 1
+        if (a.isOnline && !b.isOnline) return -1
+        if (!a.isOnline && b.isOnline) return 1
+        return a.username.localeCompare(b.username)
+    })
+  }, [allProfiles, onlinePlayers, user.id, username])
+
   const addNotification = useCallback((message, type) => {
     const id = Date.now() + Math.random()
     setNotifications(prev => [...prev, { id, message, type }])
-    
+
     // Auto-dismiss after 4 seconds
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id))
@@ -86,21 +150,21 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
     async function initGame() {
       try {
         console.log('Starting game initialization...')
-        
+
         // Clear container first to prevent duplicate canvases
         if (containerRef.current) {
           containerRef.current.innerHTML = ''
         }
-        
+
         // Step 1: Initialize Three.js engine
         setLoadingStatus('Setting up 3D engine...')
         engine = new GameEngine(containerRef.current)
         // Store engine reference immediately for cleanup
         if (!gameRef.current) gameRef.current = {}
         gameRef.current.engine = engine
-        
+
         console.log('Engine initialized')
-        
+
         // Step 2: Load map
         setLoadingStatus('Loading map...')
         try {
@@ -128,7 +192,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         // Step 5: Initialize remote players manager
         console.log('Initializing RemotePlayers...')
         remotePlayers = new RemotePlayersManager(engine.scene)
-        
+
         // Preload models for smooth multiplayer experience
         setLoadingStatus('Loading characters...')
         await remotePlayers.preloadModels()
@@ -137,10 +201,10 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         setLoadingStatus('Connecting to server...')
         console.log('Connecting to Multiplayer...')
         multiplayer = new MultiplayerManager(user.id, username, profile)
-        
+
         // Connect controller to multiplayer for projectile sync
         controller.setMultiplayer(multiplayer)
-        
+
         // Set up multiplayer callbacks
         multiplayer.onPlayerMove = (data) => {
           // Use gameRef to ensure we use the active instance
@@ -159,35 +223,35 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           const activeRemotePlayers = gameRef.current?.remotePlayers
           const activeController = gameRef.current?.controller
           const activeMultiplayer = gameRef.current?.multiplayer
-          
+
           let isNewPlayer = true;
           if (activeRemotePlayers) {
-              // Check if player already exists
-              if (activeRemotePlayers.players.has(presence.user_id)) {
-                  isNewPlayer = false;
-              }
-              activeRemotePlayers.addPlayer(presence.user_id, presence.username, presence.color, undefined, presence.model_url || presence.modelUrl)
+            // Check if player already exists
+            if (activeRemotePlayers.players.has(presence.user_id)) {
+              isNewPlayer = false;
+            }
+            activeRemotePlayers.addPlayer(presence.user_id, presence.username, presence.color, undefined, presence.model_url || presence.modelUrl)
           }
-          
+
           if (isNewPlayer) {
-              addNotification(`${presence.username} joined the game`, 'join')
+            addNotification(`${presence.username} joined the game`, 'join')
           } else {
-              console.log(`[Game] Player ${presence.username} updated (ignored join notification)`)
+            console.log(`[Game] Player ${presence.username} updated (ignored join notification)`)
           }
-          
+
           // Broadcast our position to the new player with a slight delay
           if (activeController) {
             console.log('Broadcasting initial position to new player')
             setTimeout(() => {
-                if (gameRef.current?.multiplayer) {
-                    gameRef.current.multiplayer.broadcastPosition(activeController.getState(), true)
-                }
+              if (gameRef.current?.multiplayer) {
+                gameRef.current.multiplayer.broadcastPosition(activeController.getState(), true)
+              }
             }, 500)
             // Send again to be safe
             setTimeout(() => {
-                if (gameRef.current?.multiplayer) {
-                    gameRef.current.multiplayer.broadcastPosition(activeController.getState(), true)
-                }
+              if (gameRef.current?.multiplayer) {
+                gameRef.current.multiplayer.broadcastPosition(activeController.getState(), true)
+              }
             }, 1500)
           }
         }
@@ -205,24 +269,23 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         multiplayer.onPresenceSync = (state) => {
           console.log('[Game] Presence Sync:', state)
           const activeRemotePlayers = gameRef.current?.remotePlayers
-          
+
           const playerList = Object.entries(state)
             .filter(([id]) => id !== user.id)
             .map(([id, presences]) => {
               const presence = presences[0]
               if (presence) {
                 const modelUrl = presence.model_url || presence.modelUrl
-                // console.log(`[Game] Processing presence for ${presence.username} (${id}). ModelURL:`, modelUrl)
                 
                 // Pre-create remote player (hidden until position sync)
                 if (activeRemotePlayers) {
-                    activeRemotePlayers.addPlayer(
-                        id, 
-                        presence.username, 
-                        presence.color, 
-                        undefined, // Initial position unknown -> defaults to 0,0,0 -> hidden
-                        modelUrl
-                    )
+                  activeRemotePlayers.addPlayer(
+                    id,
+                    presence.username,
+                    presence.color,
+                    undefined,
+                    modelUrl
+                  )
                 }
               }
               return {
@@ -230,7 +293,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
                 username: presence?.username || 'Unknown'
               }
             })
-          setPlayers(playerList)
+          setOnlinePlayers(playerList)
         }
 
         // Handle remote projectile spawns
@@ -270,11 +333,11 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
 
         // Request initial state from existing players with retries
         const requestStateWithRetry = () => {
-            if (gameRef.current?.multiplayer) {
-                gameRef.current.multiplayer.requestState()
-            }
+          if (gameRef.current?.multiplayer) {
+            gameRef.current.multiplayer.requestState()
+          }
         }
-        
+
         requestStateWithRetry()
         setTimeout(requestStateWithRetry, 1000)
         setTimeout(requestStateWithRetry, 2000)
@@ -326,8 +389,8 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
 
           // Debug scene periodically
           if (frameCount % 120 === 0 && gameRef.current?.remotePlayers && gameRef.current?.engine) {
-              console.log(`[Game] Engine Scene UUID: ${gameRef.current.engine.scene.uuid}`)
-              gameRef.current.remotePlayers.debugScene()
+            console.log(`[Game] Engine Scene UUID: ${gameRef.current.engine.scene.uuid}`)
+            gameRef.current.remotePlayers.debugScene()
           }
 
           animationRef.current = requestAnimationFrame(gameLoop)
@@ -343,10 +406,10 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
 
     initGame()
 
-      // Cleanup
+    // Cleanup
     return () => {
       isRunning = false
-      
+
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current)
       }
@@ -356,7 +419,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
       if (remotePlayers) remotePlayers.dispose()
       if (controller) controller.dispose()
       if (engine) engine.dispose()
-      
+
       // Clear refs
       gameRef.current = null
     }
@@ -365,26 +428,26 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
   // Handle profile updates dynamically
   useEffect(() => {
     if (!gameRef.current || !profile) return
-    
+
     const { controller, multiplayer, engine } = gameRef.current
-    
+
     // Update Controller
     if (controller) {
       console.log('Updating controller profile:', profile)
       controller.profile = profile
       controller.setProjectileColor(profile.color)
       setBallColor(profile.color)
-      
+
       // Reload model if changed
       if (controller.model) {
-         engine.scene.remove(controller.model)
-         controller.model = null
+        engine.scene.remove(controller.model)
+        controller.model = null
       }
       if (profile.modelUrl) {
         controller.loadModel(profile.modelUrl, profile.color)
       }
     }
-    
+
     // Update Multiplayer
     if (multiplayer) {
       console.log('Updating multiplayer profile:', profile)
@@ -398,10 +461,10 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           model_url: profile.modelUrl,
           joined_at: new Date().toISOString()
         }).then(() => {
-            // Force broadcast position to ensure others update the model immediately
-            if (controller) {
-                multiplayer.broadcastPosition(controller.getState(), true)
-            }
+          // Force broadcast position to ensure others update the model immediately
+          if (controller) {
+            multiplayer.broadcastPosition(controller.getState(), true)
+          }
         }).catch(err => console.error('Failed to update presence:', err))
       }
     }
@@ -411,7 +474,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
   return (
     <div className="game-wrapper">
       <div ref={containerRef} className="game-container" />
-      
+
       {isLoading && (
         <div className={`loading-overlay ${isFadingOut ? 'fade-out' : ''}`}>
           <div className="loading-content">
@@ -429,13 +492,13 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         </div>
       )}
 
-          {!isLoading && (
+      {!isLoading && (
         <>
           {/* Notifications */}
           <div className="notification-container">
             {notifications.map(notification => (
-              <div 
-                key={notification.id} 
+              <div
+                key={notification.id}
                 className={`notification-item ${notification.type === 'join' ? 'notification-join' : 'notification-leave'}`}
               >
                 <span className="notification-icon">{notification.type === 'join' ? '👋' : '🚪'}</span>
@@ -445,13 +508,41 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           </div>
 
           <div className="game-hud">
-            <div className="hud-top">
-              <div className="player-info">
-                <span className="player-name">{username}</span>
-                <span className={`connection-status ${isConnected ? 'connected' : ''}`}>
-                  {isConnected ? '● Connected' : '○ Disconnected'}
-                </span>
+            <div className="player-list-overlay">
+              <div className="player-list-header">
+                <span className="player-list-title">Players</span>
+                <span className={`connection-dot ${isConnected ? 'connected' : ''}`} title={isConnected ? 'Connected' : 'Disconnected'} />
               </div>
+              <div className="player-list-scroll">
+                {playerList.map((player) => (
+                  <div key={player.userId} className={`player-list-item ${player.isSelf ? 'self' : ''} ${!player.isOnline ? 'offline' : ''}`}>
+                    <span className="player-status-indicator" title={player.isOnline ? 'Online' : 'Offline'}>
+                      {player.isOnline ? '●' : '○'}
+                    </span>
+                    <div className="player-info-text">
+                        <span className="player-name-text">{player.username}</span>
+                        {player.email && <span className="player-email-text">{player.email}</span>}
+                    </div>
+                    {isMaster && player.isOnline && !player.isSelf && (
+                      <button
+                        className="kick-btn-overlay"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (window.confirm(`Are you sure you want to kick ${player.username}?`)) {
+                            handleKickPlayer(player.userId)
+                          }
+                        }}
+                        title="Kick player"
+                      >
+                        🚫
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="hud-top">
               <div className="hud-controls">
                 <button onClick={() => setShowCharacterModal(true)} className="secondary-btn">
                   Change Character
@@ -473,7 +564,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
             <div className="hud-settings">
               <div className="setting-item">
                 <span className="setting-label">View:</span>
-                <button 
+                <button
                   className={`view-btn ${isThirdPerson ? 'active' : ''}`}
                   onClick={handleTogglePerspective}
                 >
@@ -482,8 +573,8 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
               </div>
               <div className="setting-item">
                 <span className="setting-label">Ball Color:</span>
-                <input 
-                  type="color" 
+                <input
+                  type="color"
                   value={ballColor}
                   onChange={handleBallColorChange}
                   className="color-picker"
@@ -492,14 +583,14 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
             </div>
           </div>
 
-          <Chat 
-            messages={messages} 
+            <Chat
+            messages={messages}
             onSendMessage={handleSendMessage}
-            players={[{ userId: user.id, username }, ...players]}
+            players={onlinePlayers} // Use only online players for chat count? Or full list? Usually online.
             isMaster={isMaster}
             onKickPlayer={handleKickPlayer}
           />
-          
+
           {showCharacterModal && (
             <CharacterSelectModal
               currentProfile={profile}
@@ -532,7 +623,7 @@ function createPlaceholderWorld(engine) {
   // Add some boxes for obstacles
   const boxGeometry = new THREE.BoxGeometry(2, 2, 2)
   const boxMaterial = new THREE.MeshLambertMaterial({ color: 0x8b7355 })
-  
+
   const positions = [
     [5, 1, 5], [-5, 1, -5], [10, 1, -3], [-8, 1, 7],
     [0, 1, 15], [12, 1, 12], [-12, 1, -12]

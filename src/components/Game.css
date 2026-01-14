@@ -368,6 +368,165 @@
 }
 
 
+/* Player list at top-left */
+.player-list-overlay {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  pointer-events: auto;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px;
+  max-height: 400px;
+  width: 220px;
+  transition: all 0.3s ease;
+}
+
+.player-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.player-list-title {
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0.5px;
+}
+
+.connection-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #ef4444; /* Red for disconnected */
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+  transition: all 0.3s ease;
+}
+
+.connection-dot.connected {
+  background-color: #4ade80; /* Green for connected */
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+}
+
+.player-list-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Custom scrollbar for player list */
+.player-list-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.player-list-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.player-list-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.player-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 6px 8px;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.player-list-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.player-list-item.self {
+  color: #fbbf24; /* Amber */
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.player-list-item.offline {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.player-status-indicator {
+  font-size: 0.6rem;
+  color: #4ade80;
+}
+
+.player-list-item.offline .player-status-indicator {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.player-info-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  justify-content: center;
+}
+
+.player-name-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.player-email-text {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-list-item.offline .player-email-text {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.kick-btn-overlay {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 2px;
+  opacity: 0.6;
+  transition: opacity 0.2s, transform 0.1s;
+  display: flex;
+  align-items: center;
+}
+
+.kick-btn-overlay:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+/* Hide original player info since we moved it */
+.player-info {
+  display: none;
+}
+
+/* Adjust top controls to right align properly */
+.hud-top {
+  justify-content: flex-end;
+}
+
 /* Notifications */
 .notification-container {
   position: absolute;
