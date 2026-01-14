@@ -15,15 +15,7 @@ function App() {
     getSession().then(({ session }) => {
       const currentUser = session?.user || null
       setUser(currentUser)
-      
-      // Check if user has character profile in metadata
-      if (currentUser?.user_metadata?.has_character) {
-        setCharacterProfile({
-          color: currentUser.user_metadata.color,
-          modelUrl: currentUser.user_metadata.model_url
-        })
-      }
-      
+      // Always start from character select screen - don't auto-load profile
       setLoading(false)
     })
 
@@ -31,15 +23,8 @@ function App() {
     const { data: { subscription } } = onAuthStateChange((_event, session) => {
       const currentUser = session?.user || null
       setUser(currentUser)
-      
-      if (currentUser?.user_metadata?.has_character) {
-        setCharacterProfile({
-          color: currentUser.user_metadata.color,
-          modelUrl: currentUser.user_metadata.model_url
-        })
-      } else {
-        setCharacterProfile(null)
-      }
+      // Reset character profile on auth change (login/logout)
+      setCharacterProfile(null)
     })
 
     return () => subscription.unsubscribe()

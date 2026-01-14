@@ -15,6 +15,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
   const animationRef = useRef(null)
   
   const [isLoading, setIsLoading] = useState(true)
+  const [isFadingOut, setIsFadingOut] = useState(false)
   const [loadingStatus, setLoadingStatus] = useState('Initializing...')
   const [messages, setMessages] = useState([])
   const [players, setPlayers] = useState([])
@@ -115,6 +116,9 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         console.log('Connecting to Multiplayer...')
         multiplayer = new MultiplayerManager(user.id, username, profile)
         
+        // Connect controller to multiplayer for projectile sync
+        controller.setMultiplayer(multiplayer)
+        
         // Set up multiplayer callbacks
         multiplayer.onPlayerMove = (data) => {
           if (!remotePlayers.players.has(data.userId)) {
@@ -149,6 +153,19 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           setPlayers(playerList)
         }
 
+        // Handle remote projectile spawns
+        multiplayer.onProjectileSpawn = (data) => {
+          console.log('Game.jsx: onProjectileSpawn called with:', data)
+          if (engine) {
+            const position = new THREE.Vector3(data.position.x, data.position.y, data.position.z)
+            const velocity = new THREE.Vector3(data.velocity.x, data.velocity.y, data.velocity.z)
+            console.log('Creating remote projectile at:', position, 'with velocity:', velocity)
+            engine.createProjectile(position, velocity, data.color)
+          } else {
+            console.warn('Engine not available for projectile spawn')
+          }
+        }
+
         await multiplayer.connect()
         setIsConnected(true)
 
@@ -161,10 +178,8 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           remotePlayers
         }
 
-        setIsLoading(false)
-        setLoadingStatus('')
-
         // Start game loop
+        let frameCount = 0
         function gameLoop() {
           if (!isRunning) return
 
@@ -186,6 +201,16 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
 
           // Render
           engine.render()
+
+          // After first few frames are rendered, start fade out
+          frameCount++
+          if (frameCount === 3) {
+            setIsFadingOut(true)
+            // Remove loading overlay after fade animation completes
+            setTimeout(() => {
+              setIsLoading(false)
+            }, 500)
+          }
 
           animationRef.current = requestAnimationFrame(gameLoop)
         }
@@ -265,11 +290,19 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
       <div ref={containerRef} className="game-container" />
       
       {isLoading && (
-        <div className="loading-overlay">
+        <div className={`loading-overlay ${isFadingOut ? 'fade-out' : ''}`}>
           <div className="loading-content">
-            <div className="loading-spinner" />
+            <div className="spinner-container">
+              <div className="loading-spinner" />
+              <div className="spinner-inner" />
+            </div>
+            <h2 className="loading-title">Entering World</h2>
             <p className="loading-text">{loadingStatus}</p>
+            <div className="loading-progress">
+              <div className="loading-progress-bar" />
+            </div>
           </div>
+          <p className="loading-tip">Tip: Use WASD to move, SPACE to jump, and click to shoot!</p>
         </div>
       )}
 

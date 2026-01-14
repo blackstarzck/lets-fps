@@ -10,6 +10,7 @@ export class PlayerController {
     this.domElement = domElement
     this.engine = engine
     this.profile = profile || { color: '#ffff00' }
+    this.multiplayer = null // Will be set after construction
     
     // State
     this.isThirdPerson = false
@@ -159,6 +160,10 @@ export class PlayerController {
     this.projectileColor = color
   }
 
+  setMultiplayer(multiplayer) {
+    this.multiplayer = multiplayer
+  }
+
   update(deltaTime) {
     // Movement speed - faster on ground
     const speedDelta = deltaTime * (this.physics.onFloor ? 25 : 8)
@@ -290,7 +295,13 @@ export class PlayerController {
     const velocity = this.direction.clone().multiplyScalar(impulse)
     velocity.addScaledVector(this.physics.velocity, 2)
 
+    // Create local projectile
     this.engine.createProjectile(spawnPos, velocity, this.projectileColor)
+    
+    // Broadcast to other players
+    if (this.multiplayer) {
+      this.multiplayer.broadcastProjectile(spawnPos, velocity, this.projectileColor)
+    }
   }
 
   getState() {

@@ -17,6 +17,7 @@ export class MultiplayerManager {
     this.onPlayerMove = null
     this.onChatMessage = null
     this.onPresenceSync = null
+    this.onProjectileSpawn = null
   }
 
   async connect(roomId = 'world-1') {
@@ -38,6 +39,15 @@ export class MultiplayerManager {
     this.channel.on('broadcast', { event: 'chat-message' }, (payload) => {
       if (this.onChatMessage) {
         this.onChatMessage(payload.payload)
+      }
+    })
+
+    // Listen for projectile spawns
+    this.channel.on('broadcast', { event: 'projectile-spawn' }, (payload) => {
+      console.log('Received projectile-spawn broadcast:', payload)
+      if (this.onProjectileSpawn && payload.payload.userId !== this.userId) {
+        console.log('Calling onProjectileSpawn callback with:', payload.payload)
+        this.onProjectileSpawn(payload.payload)
       }
     })
 
@@ -150,6 +160,24 @@ export class MultiplayerManager {
         userId: this.userId,
         username: this.username,
         message: message.trim(),
+        timestamp: Date.now()
+      }
+    })
+  }
+
+  broadcastProjectile(position, velocity, color) {
+    if (!this.channel) return
+
+    console.log('Broadcasting projectile:', { position, velocity, color })
+    
+    this.channel.send({
+      type: 'broadcast',
+      event: 'projectile-spawn',
+      payload: {
+        userId: this.userId,
+        position: { x: position.x, y: position.y, z: position.z },
+        velocity: { x: velocity.x, y: velocity.y, z: velocity.z },
+        color,
         timestamp: Date.now()
       }
     })

@@ -144,9 +144,19 @@ export class GameEngine {
         playerPhysics.resolveSphereCollision(sphere)
       }
 
-      // Remove if out of bounds
-      if (sphere.collider.center.y < -50) {
+      // Remove if out of bounds OR lifetime expired
+      const now = performance.now()
+      const age = now - sphere.spawnTime
+      const isExpired = sphere.spawnTime && (age > sphere.lifetime)
+      
+      if (isExpired) {
+        console.log('Projectile expired. Age:', age, 'Lifetime:', sphere.lifetime)
+      }
+      
+      if (sphere.collider.center.y < -50 || isExpired) {
         this.scene.remove(sphere)
+        sphere.geometry.dispose()
+        sphere.material.dispose()
         this.projectiles.splice(i, 1)
         continue
       }
@@ -204,6 +214,11 @@ export class GameEngine {
     sphere.collider = new THREE.Sphere(position.clone(), radius)
     sphere.velocity = velocity.clone()
     
+    // Lifetime - 40 seconds
+    sphere.spawnTime = performance.now()
+    sphere.lifetime = 40000 // 40 seconds in ms
+    console.log('Projectile created with lifetime:', sphere.lifetime, 'spawnTime:', sphere.spawnTime)
+    
     // Sync mesh with collider
     sphere.position.copy(position)
 
@@ -214,6 +229,8 @@ export class GameEngine {
     if (this.projectiles.length > 100) {
       const old = this.projectiles.shift()
       this.scene.remove(old)
+      old.geometry.dispose()
+      old.material.dispose()
     }
   }
 
