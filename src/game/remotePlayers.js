@@ -221,6 +221,22 @@ export class RemotePlayersManager {
         console.log(`Player ${player.username} (${userId}) received first update - making visible`)
         player.mesh.visible = true
     }
+    
+    // Check if we need to load/update model
+    if (state.modelUrl && state.modelUrl !== player.modelUrl) {
+        console.log(`Model update detected for ${player.username}: ${player.modelUrl} -> ${state.modelUrl}`)
+        player.modelUrl = state.modelUrl
+        // Remove old model if exists (but keep placeholder for now)
+        if (player.model) {
+            player.mesh.remove(player.model)
+            player.model = null
+        }
+        // Load new model
+        this.loadPlayerModel(userId, state.modelUrl, state.color || '#ffffff')
+    } else if (player.modelUrl && !player.model) {
+        // Retry loading model if url exists but model is missing
+        this.loadPlayerModel(userId, player.modelUrl, state.color || '#ffffff')
+    }
 
     // Update target position for interpolation
     player.targetPosition.set(
