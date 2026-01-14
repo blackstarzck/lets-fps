@@ -156,6 +156,12 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           // Ensure we pass model_url from presence
           remotePlayers.addPlayer(presence.user_id, presence.username, presence.color, undefined, presence.model_url || presence.modelUrl)
           addNotification(`${presence.username} joined the game`, 'join')
+          
+          // Immediately broadcast our position to the new player
+          if (controller) {
+            console.log('Broadcasting initial position to new player')
+            multiplayer.broadcastPosition(controller.getState(), true)
+          }
         }
 
         multiplayer.onPlayerLeave = (presence) => {

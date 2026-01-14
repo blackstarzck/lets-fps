@@ -119,17 +119,17 @@ export class MultiplayerManager {
     })
   }
 
-  broadcastPosition(state) {
+  broadcastPosition(state, force = false) {
     if (!this.channel) return
 
     const now = performance.now()
     
-    // Throttle broadcasts
-    if (now - this.lastBroadcastTime < BROADCAST_INTERVAL_MS) {
+    // Throttle broadcasts, unless forced
+    if (!force && now - this.lastBroadcastTime < BROADCAST_INTERVAL_MS) {
       return
     }
 
-    // Only broadcast if position changed significantly
+    // Only broadcast if position changed significantly, unless forced
     const pos = state.position
     const threshold = 0.01
     const moved = 
@@ -137,7 +137,7 @@ export class MultiplayerManager {
       Math.abs(pos.y - this.lastPosition.y) > threshold ||
       Math.abs(pos.z - this.lastPosition.z) > threshold
 
-    if (!moved) return
+    if (!moved && !force) return
 
     this.channel.send({
       type: 'broadcast',
