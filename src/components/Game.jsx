@@ -23,9 +23,20 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
   const [isThirdPerson, setIsThirdPerson] = useState(false)
   const [ballColor, setBallColor] = useState(profile?.color || '#ffff00')
   const [showCharacterModal, setShowCharacterModal] = useState(false)
+  const [notifications, setNotifications] = useState([])
 
   const username = user.user_metadata?.username || user.email?.split('@')[0] || 'Player'
   const isMaster = user.email === 'bucheongosok@gmail.com'
+
+  const addNotification = useCallback((message, type) => {
+    const id = Date.now() + Math.random()
+    setNotifications(prev => [...prev, { id, message, type }])
+    
+    // Auto-dismiss after 4 seconds
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id))
+    }, 4000)
+  }, [])
 
   const handleTogglePerspective = () => {
     if (gameRef.current?.controller) {
@@ -117,6 +128,10 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         // Step 5: Initialize remote players manager
         console.log('Initializing RemotePlayers...')
         remotePlayers = new RemotePlayersManager(engine.scene)
+        
+        // Preload models for smooth multiplayer experience
+        setLoadingStatus('Loading characters...')
+        await remotePlayers.preloadModels()
 
         // Step 6: Connect to multiplayer
         setLoadingStatus('Connecting to server...')
@@ -140,11 +155,13 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           console.log('Player joined:', presence.username, presence.model_url)
           // Ensure we pass model_url from presence
           remotePlayers.addPlayer(presence.user_id, presence.username, presence.color, undefined, presence.model_url || presence.modelUrl)
+          addNotification(`${presence.username} joined the game`, 'join')
         }
 
         multiplayer.onPlayerLeave = (presence) => {
           console.log('Player left:', presence.user_id)
           remotePlayers.removePlayer(presence.user_id)
+          addNotification(`${presence.username} left the game`, 'leave')
         }
 
         multiplayer.onChatMessage = (data) => {
@@ -328,8 +345,21 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         </div>
       )}
 
-      {!isLoading && (
+          {!isLoading && (
         <>
+          {/* Notifications */}
+          <div className="notification-container">
+            {notifications.map(notification => (
+              <div 
+                key={notification.id} 
+                className={`notification-item ${notification.type === 'join' ? 'notification-join' : 'notification-leave'}`}
+              >
+                <span className="notification-icon">{notification.type === 'join' ? '👋' : '🚪'}</span>
+                <span className="notification-text">{notification.message}</span>
+              </div>
+            ))}
+          </div>
+
           <div className="game-hud">
             <div className="hud-top">
               <div className="player-info">

@@ -17,6 +17,30 @@ export class RemotePlayersManager {
     this.placeholderMaterial = new THREE.MeshLambertMaterial({ color: 0x888888 })
   }
 
+  async preloadModels() {
+    console.log('Preloading all character models...')
+    const promises = MODELS.map(modelDef => {
+      const url = STORAGE_URL + modelDef.file
+      // Skip if already cached
+      if (this.modelCache.has(url)) return Promise.resolve()
+      
+      return new Promise((resolve) => {
+        this.loader.load(url, (gltf) => {
+          this.modelCache.set(url, gltf)
+          console.log(`Preloaded: ${modelDef.name}`)
+          resolve()
+        }, undefined, (err) => {
+          console.error(`Failed to preload ${modelDef.name}:`, err)
+          // Resolve anyway to continue loading
+          resolve()
+        })
+      })
+    })
+    
+    await Promise.all(promises)
+    console.log('All models preloaded')
+  }
+
   getPlayerColor(userId) {
     // Legacy support or fallback
     let hash = 0
