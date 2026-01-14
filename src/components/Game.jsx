@@ -143,33 +143,40 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         
         // Set up multiplayer callbacks
         multiplayer.onPlayerMove = (data) => {
-          if (!remotePlayers.players.has(data.userId)) {
-            console.log('Adding new player from move:', data.username, data.modelUrl)
-            // Pass modelUrl and color from data
-            remotePlayers.addPlayer(data.userId, data.username, data.color, data.position, data.model_url || data.modelUrl)
+          // Use gameRef to ensure we use the active instance
+          const activeRemotePlayers = gameRef.current?.remotePlayers
+          if (!activeRemotePlayers) return
+
+          if (!activeRemotePlayers.players.has(data.userId)) {
+            console.log('[Game] Adding new player from move:', data.username, data.modelUrl)
+            activeRemotePlayers.addPlayer(data.userId, data.username, data.color, data.position, data.model_url || data.modelUrl)
           }
-          remotePlayers.updatePlayer(data.userId, data)
+          activeRemotePlayers.updatePlayer(data.userId, data)
         }
 
         multiplayer.onPlayerJoin = (presence) => {
-          console.log('Player joined:', presence.username, presence.model_url)
-          // Ensure we pass model_url from presence
-          remotePlayers.addPlayer(presence.user_id, presence.username, presence.color, undefined, presence.model_url || presence.modelUrl)
+          console.log('[Game] Player joined:', presence.username, presence.model_url)
+          const activeRemotePlayers = gameRef.current?.remotePlayers
+          const activeController = gameRef.current?.controller
+          const activeMultiplayer = gameRef.current?.multiplayer
+          
+          if (activeRemotePlayers) {
+              activeRemotePlayers.addPlayer(presence.user_id, presence.username, presence.color, undefined, presence.model_url || presence.modelUrl)
+          }
           addNotification(`${presence.username} joined the game`, 'join')
           
           // Broadcast our position to the new player with a slight delay
-          // to ensure they are ready to receive
-          if (controller) {
+          if (activeController) {
             console.log('Broadcasting initial position to new player')
             setTimeout(() => {
                 if (gameRef.current?.multiplayer) {
-                    gameRef.current.multiplayer.broadcastPosition(controller.getState(), true)
+                    gameRef.current.multiplayer.broadcastPosition(activeController.getState(), true)
                 }
             }, 500)
             // Send again to be safe
             setTimeout(() => {
                 if (gameRef.current?.multiplayer) {
-                    gameRef.current.multiplayer.broadcastPosition(controller.getState(), true)
+                    gameRef.current.multiplayer.broadcastPosition(activeController.getState(), true)
                 }
             }, 1500)
           }
@@ -186,19 +193,25 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         }
 
         multiplayer.onPresenceSync = (state) => {
+          console.log('[Game] Presence Sync:', state)
+          const activeRemotePlayers = gameRef.current?.remotePlayers
+          
           const playerList = Object.entries(state)
             .filter(([id]) => id !== user.id)
             .map(([id, presences]) => {
               const presence = presences[0]
               if (presence) {
+                const modelUrl = presence.model_url || presence.modelUrl
+                // console.log(`[Game] Processing presence for ${presence.username} (${id}). ModelURL:`, modelUrl)
+                
                 // Pre-create remote player (hidden until position sync)
-                if (remotePlayers) {
-                    remotePlayers.addPlayer(
+                if (activeRemotePlayers) {
+                    activeRemotePlayers.addPlayer(
                         id, 
                         presence.username, 
                         presence.color, 
                         undefined, // Initial position unknown -> defaults to 0,0,0 -> hidden
-                        presence.model_url || presence.modelUrl
+                        modelUrl
                     )
                 }
               }
@@ -299,6 +312,12 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
             setTimeout(() => {
               setIsLoading(false)
             }, 500)
+          }
+
+          // Debug scene periodically
+          if (frameCount % 120 === 0 && gameRef.current?.remotePlayers && gameRef.current?.engine) {
+              console.log(`[Game] Engine Scene UUID: ${gameRef.current.engine.scene.uuid}`)
+              gameRef.current.remotePlayers.debugScene()
           }
 
           animationRef.current = requestAnimationFrame(gameLoop)

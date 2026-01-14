@@ -39,6 +39,7 @@ export class MultiplayerManager {
 
     // Listen for state requests (new player joining)
     this.channel.on('broadcast', { event: 'request-state' }, (payload) => {
+      console.log(`[Multiplayer] Received request-state from ${payload.payload.userId}`)
       if (this.onRequestState && payload.payload.userId !== this.userId) {
         this.onRequestState(payload.payload)
       }
@@ -146,6 +147,8 @@ export class MultiplayerManager {
       Math.abs(pos.z - this.lastPosition.z) > threshold
 
     if (!moved && !force) return
+
+    if (force) console.log(`[Multiplayer] Broadcasting position (FORCED) for ${this.userId}`)
 
     this.channel.send({
       type: 'broadcast',

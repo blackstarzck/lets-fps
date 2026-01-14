@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js'
 import { MODELS, STORAGE_URL } from './constants'
 
 // Interpolation factor for smooth movement
@@ -54,10 +55,19 @@ export class RemotePlayersManager {
   addPlayer(userId, username, color = '#ffffff', initialPosition = { x: 0, y: 0, z: 0 }, modelUrl = null) {
     if (this.players.has(userId)) return
 
+    // Ensure valid numbers for position
+    const safePos = {
+        x: Number(initialPosition?.x || 0),
+        y: Number(initialPosition?.y || 0),
+        z: Number(initialPosition?.z || 0)
+    }
+
+    console.log(`[RemotePlayers] addPlayer: ${username} (${userId}) at ${JSON.stringify(safePos)}`)
+
     // Create container group
     const playerGroup = new THREE.Group()
     // Adjust Y position to match updatePlayer logic (capsule top -> floor)
-    playerGroup.position.set(initialPosition.x, initialPosition.y - 1, initialPosition.z)
+    playerGroup.position.set(safePos.x, safePos.y - 1, safePos.z)
     
     // 1. Create Placeholder first
     const placeholder = new THREE.Mesh(this.placeholderGeometry, new THREE.MeshLambertMaterial({ color }))
@@ -65,6 +75,21 @@ export class RemotePlayersManager {
     placeholder.castShadow = true
     placeholder.receiveShadow = true
     playerGroup.add(placeholder)
+
+    // DEBUG: Add explicit Red Box to confirm position/rendering (WALLHACK STYLE)
+    /* 
+    const debugGeo = new THREE.BoxGeometry(0.5, 50, 0.5); // Very tall red pole
+    const debugMat = new THREE.MeshBasicMaterial({ 
+        color: 0xff0000, 
+        wireframe: true,
+        depthTest: false, // Always visible through walls
+        depthWrite: false
+    });
+    const debugMesh = new THREE.Mesh(debugGeo, debugMat);
+    debugMesh.name = 'DEBUG_POLE';
+    debugMesh.renderOrder = 999; // Render last (on top)
+    playerGroup.add(debugMesh);
+    */
 
     // Username label
     const label = this.createUsernameLabel(username)
@@ -76,7 +101,7 @@ export class RemotePlayersManager {
     // Store player data
     const playerData = {
       mesh: playerGroup,
-      targetPosition: new THREE.Vector3(initialPosition.x, initialPosition.y - 1, initialPosition.z),
+      targetPosition: new THREE.Vector3(safePos.x, safePos.y - 1, safePos.z),
       targetRotation: new THREE.Euler(0, 0, 0),
       username,
       modelUrl,
@@ -95,46 +120,55 @@ export class RemotePlayersManager {
       this.loadPlayerModel(userId, modelUrl, color)
     }
 
-    // If initial position is default (0,0,0) and likely from join event without pos data,
-    // hide player until first update to avoid spawn clustering
-    if (initialPosition.x === 0 && initialPosition.y === 0 && initialPosition.z === 0) {
-        console.log(`Player ${username} (${userId}) created at 0,0,0 - hiding until update`)
-        playerGroup.visible = false
-    } else {
-        console.log(`Player ${username} (${userId}) created at valid pos - visible`)
-    }
+    // Force visible for debugging
+    playerGroup.visible = true
+    console.log(`[RemotePlayers] Player ${username} added to scene at ${JSON.stringify(playerGroup.position)}`)
   }
 
   async loadPlayerModel(userId, modelFile, colorHex) {
+    console.log(`[RemotePlayers] loadPlayerModel called for ${userId}, file: ${modelFile}`)
     try {
       // Find model definition
       const modelDef = MODELS.find(m => m.file === modelFile)
+      
+      if (!modelDef) {
+          console.warn(`[RemotePlayers] Model definition not found for file: ${modelFile}. Available models:`, MODELS.map(m => m.file))
+      }
+
       const yOffset = modelDef ? (modelDef.yOffset || 0) : 0
       const radius = modelDef ? (modelDef.radius || 0.35) : 0.35
 
       // Construct full URL from filename
       const url = modelFile.startsWith('http') ? modelFile : STORAGE_URL + modelFile
+      console.log(`[RemotePlayers] Loading GLTF from: ${url}`)
       
       let gltf = this.modelCache.get(url)
       
       if (!gltf) {
+        console.log(`[RemotePlayers] Model not cached, fetching...`)
         gltf = await new Promise((resolve, reject) => {
           this.loader.load(url, resolve, undefined, reject)
         })
         this.modelCache.set(url, gltf)
+        console.log(`[RemotePlayers] Model fetched and cached: ${url}`)
+      } else {
+        console.log(`[RemotePlayers] Using cached model: ${url}`)
       }
 
       const player = this.players.get(userId)
-      if (!player) return // Player might have left
+      if (!player) {
+          console.warn(`[RemotePlayers] Player ${userId} left before model loaded`)
+          return 
+      }
 
       // Update player yOffset and radius
       player.yOffset = yOffset
       player.radius = radius
 
-      console.log(`Loading model for ${userId}: ${modelFile}, yOffset: ${yOffset}`)
+      console.log(`[RemotePlayers] Applying model to player ${userId}, yOffset: ${yOffset}`)
 
-      // Clone the model
-      const model = gltf.scene.clone()
+      // Clone the model properly using SkeletonUtils for SkinnedMesh support
+      const model = SkeletonUtils.clone(gltf.scene)
       
       // Apply color/tint to meshes if possible
       const color = new THREE.Color(colorHex)
@@ -142,6 +176,7 @@ export class RemotePlayersManager {
         if (child.isMesh) {
           child.castShadow = true
           child.receiveShadow = true
+          
           // Clone material to avoid affecting other players
           if (child.material) {
             child.material = child.material.clone()
@@ -154,9 +189,15 @@ export class RemotePlayersManager {
       // Scale and Position adjustments
       // Assuming standard mixamo-like characters ~1.8m tall
       // Adjust these based on your specific models
-      model.scale.set(1, 1, 1) 
+      model.scale.set(1, 1, 1) // Restore original scale
       model.position.y = yOffset || 0 // Apply Y offset for different models
       model.rotation.y = Math.PI // Fix orientation if needed (Mixamo often faces +Z)
+
+      // Debug model bounds
+      // const box = new THREE.Box3().setFromObject(model);
+      // const size = new THREE.Vector3();
+      // box.getSize(size);
+      // console.log(`[RemotePlayers] Loaded Model Bounds for ${userId}: Size=${JSON.stringify(size)}, Center=${JSON.stringify(box.getCenter(new THREE.Vector3()))}`);
 
       // Animation Setup
       if (gltf.animations && gltf.animations.length > 0) {
@@ -179,12 +220,19 @@ export class RemotePlayersManager {
       }
 
       // Swap placeholder with model
-      player.mesh.remove(player.placeholder)
       player.mesh.add(model)
       player.model = model // Save reference
+      
+      // Remove placeholder now that model is loaded
+      if (player.placeholder) {
+        player.mesh.remove(player.placeholder)
+        player.placeholder = null
+      }
+      
+      console.log(`[RemotePlayers] Model successfully attached to player ${userId}`)
 
     } catch (error) {
-      console.error(`Failed to load model for ${userId}:`, error)
+      console.error(`[RemotePlayers] Failed to load model for ${userId}:`, error)
       // Fallback: Keep placeholder
     }
   }
@@ -216,11 +264,18 @@ export class RemotePlayersManager {
     const player = this.players.get(userId)
     if (!player) return
 
-    // Make visible on first update if it was hidden
-    if (!player.mesh.visible) {
-        console.log(`Player ${player.username} (${userId}) received first update - making visible`)
-        player.mesh.visible = true
+    // Ensure valid numbers for state position
+    const safePos = {
+        x: Number(state.position?.x || 0),
+        y: Number(state.position?.y || 0),
+        z: Number(state.position?.z || 0)
     }
+
+    // Debug update position
+    // console.log(`[RemotePlayers] Updating ${player.username}:`, state.position)
+
+    // Make visible on first update if it was hidden
+    if (!player.mesh.visible) player.mesh.visible = true;
     
     // Check if we need to load/update model
     if (state.modelUrl && state.modelUrl !== player.modelUrl) {
@@ -240,9 +295,9 @@ export class RemotePlayersManager {
 
     // Update target position for interpolation
     player.targetPosition.set(
-      state.position.x,
-      state.position.y - 1, // Adjust for capsule center offset if needed (depends on model origin)
-      state.position.z
+      safePos.x,
+      safePos.y - 1, // Adjust for capsule center offset if needed (depends on model origin)
+      safePos.z
     )
 
     // Check movement for animation
@@ -337,6 +392,19 @@ export class RemotePlayersManager {
   getRemoteColliders() {
     const colliders = []
     this.players.forEach((player) => {
+      // Validate position
+      if (
+          isNaN(player.mesh.position.x) || 
+          isNaN(player.mesh.position.y) || 
+          isNaN(player.mesh.position.z) ||
+          !isFinite(player.mesh.position.x) ||
+          !isFinite(player.mesh.position.y) ||
+          !isFinite(player.mesh.position.z)
+      ) {
+          console.warn(`[RemotePlayers] Skipping collider for ${player.username} - Invalid position:`, player.mesh.position);
+          return;
+      }
+
       // Create segment for capsule
       const radius = player.radius || 0.35
       const height = 1.8 // Standard height
@@ -355,6 +423,15 @@ export class RemotePlayersManager {
       })
     })
     return colliders
+  }
+
+  debugScene() {
+    console.log(`[RemotePlayers] Debug - Scene UUID: ${this.scene.uuid}, Children: ${this.scene.children.length}, Players: ${this.players.size}`)
+    this.players.forEach((p, id) => {
+        const worldPos = new THREE.Vector3()
+        p.mesh.getWorldPosition(worldPos)
+        console.log(`[RemotePlayers] Player ${p.username} (${id}): Vis=${p.mesh.visible}, LocalPos=${JSON.stringify(p.mesh.position)}, WorldPos=${JSON.stringify(worldPos)}, InScene=${this.scene.children.includes(p.mesh)}`)
+    })
   }
 
   dispose() {

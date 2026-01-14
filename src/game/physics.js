@@ -55,6 +55,13 @@ export class PlayerPhysics {
     const p1End = this.collider.end
     const r1 = this.collider.radius
 
+    // Validate local collider
+    if (isNaN(p1Start.x) || isNaN(p1Start.y) || isNaN(p1Start.z)) {
+        console.error('[Physics] Local collider start is NaN! Resetting.');
+        this.reset();
+        return;
+    }
+
     for (const remote of remoteColliders) {
       let p2Start, p2End, r2
       
@@ -72,8 +79,19 @@ export class PlayerPhysics {
         p2End.y += height - r2
       }
 
+      // Validate remote segment
+      if (isNaN(p2Start.x) || isNaN(p2Start.y) || isNaN(p2Start.z)) {
+          console.warn('[Physics] Skipping remote collider with NaN start');
+          continue;
+      }
+
       const { point1, point2, distSq } = this._closestPointSegmentToSegment(p1Start, p1End, p2Start, p2End)
       
+      if (isNaN(distSq)) {
+          console.warn('[Physics] distSq is NaN');
+          continue;
+      }
+
       const minSeparation = r1 + r2
       
       if (distSq < minSeparation * minSeparation && distSq > 1e-10) {
@@ -83,6 +101,11 @@ export class PlayerPhysics {
         // Direction from remote(point2) to local(point1)
         const normal = point1.clone().sub(point2).normalize()
         
+        // Safety check for normal
+        if (isNaN(normal.x) || isNaN(normal.y) || isNaN(normal.z)) {
+            continue;
+        }
+
         // Push local player out
         this.collider.translate(normal.clone().multiplyScalar(overlap))
         
