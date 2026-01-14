@@ -84,6 +84,7 @@ export class RemotePlayersManager {
       mixer: null,
       actions: {},
       isMoving: false,
+      justJoined: true, // Flag for initial teleport
       placeholder // Keep reference to remove later
     }
     
@@ -253,18 +254,26 @@ export class RemotePlayersManager {
     // Interpolate all remote players towards their target positions
     this.players.forEach((player) => {
       // Position interpolation
-      player.mesh.position.lerp(player.targetPosition, LERP_FACTOR)
-      
-      // Rotation interpolation (Y axis only)
-      const currentY = player.mesh.rotation.y
-      let targetY = player.targetRotation.y
-      
-      // Shortest path interpolation for angle
-      const delta = targetY - currentY
-      if (delta > Math.PI) targetY -= Math.PI * 2
-      if (delta < -Math.PI) targetY += Math.PI * 2
-      
-      player.mesh.rotation.y += (targetY - currentY) * LERP_FACTOR
+      if (player.justJoined) {
+        // Teleport immediately for first update
+        player.mesh.position.copy(player.targetPosition)
+        // Also sync rotation immediately
+        player.mesh.rotation.y = player.targetRotation.y
+        player.justJoined = false
+      } else {
+        player.mesh.position.lerp(player.targetPosition, LERP_FACTOR)
+        
+        // Rotation interpolation (Y axis only)
+        const currentY = player.mesh.rotation.y
+        let targetY = player.targetRotation.y
+        
+        // Shortest path interpolation for angle
+        const delta = targetY - currentY
+        if (delta > Math.PI) targetY -= Math.PI * 2
+        if (delta < -Math.PI) targetY += Math.PI * 2
+        
+        player.mesh.rotation.y += (targetY - currentY) * LERP_FACTOR
+      }
 
       // Update Animation
       if (player.mixer) {
