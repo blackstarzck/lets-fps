@@ -90,16 +90,10 @@ export class MultiplayerManager {
     // Listen for player leaves
     this.channel.on('presence', { event: 'leave' }, ({ leftPresences }) => {
       if (this.onPlayerLeave) {
-        const currentState = this.channel.presenceState()
         leftPresences.forEach(presence => {
-          // Check if this user is still in the state (meaning it was just an update, not a leave)
-          const userId = presence.user_id
-          const isStillHere = Object.keys(currentState).includes(userId)
-
-          if (!isStillHere) {
-            this.onPlayerLeave(presence)
-          } else {
-            console.log(`[Multiplayer] User ${userId} updated presence (ignored leave event)`)
+          // Just pass the event to Game.jsx to handle debouncing/logic
+          if (presence.user_id !== this.userId) {
+             this.onPlayerLeave(presence)
           }
         })
       }

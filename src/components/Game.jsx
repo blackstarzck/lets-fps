@@ -14,7 +14,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
   const containerRef = useRef(null)
   const gameRef = useRef(null)
   const animationRef = useRef(null)
-
+  
   const [isLoading, setIsLoading] = useState(true)
   const [isFadingOut, setIsFadingOut] = useState(false)
   const [loadingStatus, setLoadingStatus] = useState('Initializing...')
@@ -27,6 +27,7 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
   const [showCharacterModal, setShowCharacterModal] = useState(false)
   const [notifications, setNotifications] = useState([])
   const initialSyncDoneRef = useRef(false) // Track if initial presence sync is complete
+  const pendingLeavesRef = useRef(new Map()) // Store pending leave timers
 
   const username = user.user_metadata?.username || user.email?.split('@')[0] || 'Player'
   const isMaster = user.email === 'bucheongosok@gmail.com'
@@ -52,44 +53,44 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
 
     // Create list from all profiles
     let list = allProfiles.map(p => ({
-      userId: p.id,
-      username: p.username || p.display_name || 'Unknown',
-      email: p.email, // Add email
-      isOnline: onlineMap.has(p.id),
-      isSelf: p.id === user.id
+        userId: p.id,
+        username: p.username || p.display_name || 'Unknown',
+        email: p.email, // Add email
+        isOnline: onlineMap.has(p.id),
+        isSelf: p.id === user.id
     }))
 
     // Add any online players not in profiles (guests/temp)
     onlinePlayers.forEach(op => {
-      if (!list.find(p => p.userId === op.userId)) {
-        list.push({
-          userId: op.userId,
-          username: op.username,
-          email: 'Guest', // Default for unknown
-          isOnline: true,
-          isSelf: false
-        })
-      }
+        if (!list.find(p => p.userId === op.userId)) {
+            list.push({
+                userId: op.userId,
+                username: op.username,
+                email: 'Guest', // Default for unknown
+                isOnline: true,
+                isSelf: false
+            })
+        }
     })
-
+    
     // Ensure self is in list if fetch failed
     if (!list.find(p => p.userId === user.id)) {
-      list.push({
-        userId: user.id,
-        username,
-        email: user.email, // Use current user email
-        isOnline: true,
-        isSelf: true
-      })
+        list.push({
+            userId: user.id,
+            username,
+            email: user.email, // Use current user email
+            isOnline: true,
+            isSelf: true
+        })
     }
 
     // Sort: Self first, then Online, then Alphabetical
     return list.sort((a, b) => {
-      if (a.isSelf) return -1
-      if (b.isSelf) return 1
-      if (a.isOnline && !b.isOnline) return -1
-      if (!a.isOnline && b.isOnline) return 1
-      return a.username.localeCompare(b.username)
+        if (a.isSelf) return -1
+        if (b.isSelf) return 1
+        if (a.isOnline && !b.isOnline) return -1
+        if (!a.isOnline && b.isOnline) return 1
+        return a.username.localeCompare(b.username)
     })
   }, [allProfiles, onlinePlayers, user.id, username])
 
@@ -167,8 +168,6 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
 
         console.log('Engine initialized')
 
-        // Projectile hit callback disabled - no knockback system
-
         // Step 2: Load map
         setLoadingStatus('Loading map...')
         try {
@@ -223,9 +222,27 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         }
 
         multiplayer.onPlayerJoin = (presence) => {
-          console.log('[Game] Player joined:', presence.username, presence.model_url)
+          // Filter out self
+          if (presence.user_id === user.id) return
+
+          console.log('[Game] Player joined:', presence.username)
           const activeRemotePlayers = gameRef.current?.remotePlayers
           const activeController = gameRef.current?.controller
+          const pendingLeaves = pendingLeavesRef.current
+
+          // Check if this is a re-join (update) from a pending leave
+          if (pendingLeaves.has(presence.user_id)) {
+              console.log(`[Game] Player ${presence.username} re-joined (update detected)`)
+              // Cancel the leave
+              clearTimeout(pendingLeaves.get(presence.user_id))
+              pendingLeaves.delete(presence.user_id)
+              
+              // Just update the player model/info
+              if (activeRemotePlayers) {
+                  activeRemotePlayers.addPlayer(presence.user_id, presence.username, presence.color, undefined, presence.model_url || presence.modelUrl)
+              }
+              return // Stop here, no notification
+          }
 
           let isNewPlayer = true;
           if (activeRemotePlayers) {
@@ -236,39 +253,52 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
             activeRemotePlayers.addPlayer(presence.user_id, presence.username, presence.color, undefined, presence.model_url || presence.modelUrl)
           }
 
-          // Only show notification after initial sync is complete (prevents flood of notifications on login)
-          if (isNewPlayer && initialSyncDoneRef.current) {
-            addNotification(`${presence.username} joined the game`, 'join')
-          } else if (!initialSyncDoneRef.current) {
-            console.log(`[Game] Player ${presence.username} already online (initial sync)`)
-          } else {
-            console.log(`[Game] Player ${presence.username} updated (ignored join notification)`)
+          console.log(`[Game] Join event for ${presence.username}. New? ${isNewPlayer}, SyncDone? ${initialSyncDoneRef.current}`)
+
+          // Always show notification for explicit join events if sync is done
+          // OR if it's genuinely a new player we haven't seen before
+          if (initialSyncDoneRef.current && isNewPlayer) {
+             // Avoid duplicate join notifications if they happen too close
+             // We can check if we recently showed a join notif for this user?
+             // For now, trust the event.
+             addNotification(`${presence.username} joined the game`, 'join')
           }
 
-          // Broadcast our position to the new player with a slight delay
+          // Broadcast our position to the new player
           if (activeController) {
-            console.log('Broadcasting initial position to new player')
             setTimeout(() => {
               if (gameRef.current?.multiplayer) {
                 gameRef.current.multiplayer.broadcastPosition(activeController.getState(), true)
               }
             }, 500)
-            // Send again to be safe
-            setTimeout(() => {
-              if (gameRef.current?.multiplayer) {
-                gameRef.current.multiplayer.broadcastPosition(activeController.getState(), true)
-              }
-            }, 1500)
           }
         }
 
         multiplayer.onPlayerLeave = (presence) => {
-          console.log('Player left:', presence.user_id)
-          remotePlayers.removePlayer(presence.user_id)
-          // Only show notification after initial sync is complete
-          if (initialSyncDoneRef.current) {
-            addNotification(`${presence.username} left the game`, 'leave')
+          console.log('[Game] Player leave queued:', presence.user_id)
+          
+          // Clear any existing pending leave timer for this user to prevent duplicates
+          if (pendingLeavesRef.current.has(presence.user_id)) {
+              clearTimeout(pendingLeavesRef.current.get(presence.user_id))
           }
+
+          // Delay leave processing to check for immediate re-join (update)
+          const timerId = setTimeout(() => {
+              console.log('[Game] Processing player leave:', presence.user_id)
+              
+              if (gameRef.current?.remotePlayers) {
+                  gameRef.current.remotePlayers.removePlayer(presence.user_id)
+              }
+              
+              // Only show notification after initial sync is complete
+              if (initialSyncDoneRef.current) {
+                addNotification(`${presence.username} left the game`, 'leave')
+              }
+              
+              pendingLeavesRef.current.delete(presence.user_id)
+          }, 200) // 200ms debounce window
+
+          pendingLeavesRef.current.set(presence.user_id, timerId)
         }
 
         multiplayer.onChatMessage = (data) => {
@@ -283,48 +313,40 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
             .filter(([id]) => id !== user.id)
             .map(([id, presences]) => {
               const presence = presences[0]
-              if (presence) {
-                const modelUrl = presence.model_url || presence.modelUrl
-
-                // Pre-create remote player (hidden until position sync)
-                if (activeRemotePlayers) {
-                  activeRemotePlayers.addPlayer(
-                    id,
-                    presence.username,
-                    presence.color,
-                    undefined,
-                    modelUrl
-                  )
-                }
-              }
               return {
                 userId: id,
-                username: presence?.username || 'Unknown'
+                username: presence?.username || 'Unknown',
+                color: presence?.color,
+                modelUrl: presence?.model_url || presence?.modelUrl
               }
             })
-          setOnlinePlayers(playerList)
+
+          // For initial sync, add existing players silently (no notification)
+          if (!initialSyncDoneRef.current && activeRemotePlayers) {
+            playerList.forEach(({ userId, username, color, modelUrl }) => {
+              if (!activeRemotePlayers.players.has(userId)) {
+                console.log(`[Game] Adding existing player from sync: ${username}`)
+                activeRemotePlayers.addPlayer(userId, username, color, undefined, modelUrl)
+              }
+            })
+          }
+
+          setOnlinePlayers(playerList.map(p => ({ userId: p.userId, username: p.username })))
 
           // Mark initial sync as complete after first sync
-          // Use a small delay to ensure all initial presence events are processed
           if (!initialSyncDoneRef.current) {
             setTimeout(() => {
               initialSyncDoneRef.current = true
               console.log('[Game] Initial presence sync complete - notifications enabled')
-            }, 1000)
+            }, 500)
           }
         }
 
-        // Handle remote projectile spawns
-        console.log('Setting up onProjectileSpawn handler')
         multiplayer.onProjectileSpawn = (data) => {
-          console.log('Game.jsx: onProjectileSpawn called with:', data)
           if (engine) {
             const position = new THREE.Vector3(data.position.x, data.position.y, data.position.z)
             const velocity = new THREE.Vector3(data.velocity.x, data.velocity.y, data.velocity.z)
-            console.log('Creating remote projectile at:', position, 'with velocity:', velocity)
             engine.createProjectile(position, velocity, data.color)
-          } else {
-            console.warn('Engine not available for projectile spawn')
           }
         }
 
@@ -340,13 +362,33 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
         }
 
         multiplayer.onRequestState = (data) => {
-          console.log('Received state request from:', data.userId)
           if (controller) {
             multiplayer.broadcastPosition(controller.getState(), true)
           }
         }
 
-        // Knockback handler disabled - players don't get pushed by projectiles
+        multiplayer.onKnockback = (data) => {
+            if (controller) {
+                controller.applyKnockback(data.impulse)
+            }
+        }
+
+        // Setup hit callback
+        engine.onProjectileHit = (targetUserId, impulse) => {
+            if (gameRef.current?.remotePlayers && gameRef.current?.multiplayer) {
+                const rp = gameRef.current.remotePlayers
+                let targetId = null
+                for (const [uid, p] of rp.players) {
+                    if (p.username === targetUserId) {
+                        targetId = uid;
+                        break;
+                    }
+                }
+                if (targetId) {
+                    gameRef.current.multiplayer.sendKnockback(targetId, impulse)
+                }
+            }
+        }
 
         await multiplayer.connect()
         setIsConnected(true)
@@ -371,6 +413,15 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           remotePlayers
         }
 
+        // Setup unload handler to send leave signal
+        const handleBeforeUnload = () => {
+            if (gameRef.current?.multiplayer) {
+                console.log('Unloading/Refreshing - disconnecting multiplayer')
+                gameRef.current.multiplayer.disconnect()
+            }
+        }
+        window.addEventListener('beforeunload', handleBeforeUnload)
+
         // Start game loop
         let frameCount = 0
         function gameLoop() {
@@ -381,7 +432,6 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           const remoteColliders = remotePlayers.getRemoteColliders()
 
           // 1. Process Input Once per Frame
-          // Pass full frame deltaTime to controller
           controller.update(rawDeltaTime)
 
           // 2. Physics substeps for accurate collision
@@ -405,16 +455,9 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
           frameCount++
           if (frameCount === 3) {
             setIsFadingOut(true)
-            // Remove loading overlay after fade animation completes
             setTimeout(() => {
               setIsLoading(false)
             }, 500)
-          }
-
-          // Debug scene periodically
-          if (frameCount % 120 === 0 && gameRef.current?.remotePlayers && gameRef.current?.engine) {
-            console.log(`[Game] Engine Scene UUID: ${gameRef.current.engine.scene.uuid}`)
-            gameRef.current.remotePlayers.debugScene()
           }
 
           animationRef.current = requestAnimationFrame(gameLoop)
@@ -433,7 +476,10 @@ export function Game({ user, profile, onLogout, onChangeCharacter }) {
     // Cleanup
     return () => {
       isRunning = false
-
+      // handleBeforeUnload removal is skipped as it's defined inside closure, 
+      // but browser cleans up event listeners on page unload anyway.
+      // For navigation within SPA, we should ideally remove it, but it requires extracting the function.
+      
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current)
       }
