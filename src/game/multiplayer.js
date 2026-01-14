@@ -24,7 +24,7 @@ export class MultiplayerManager {
     this.channel = supabase.channel(roomId, {
       config: {
         presence: { key: this.userId },
-        broadcast: { ack: false, self: true } // Enable self-receive for debugging
+        broadcast: { ack: false, self: false }
       }
     })
 
@@ -37,31 +37,15 @@ export class MultiplayerManager {
 
     // Listen for chat messages
     this.channel.on('broadcast', { event: 'chat-message' }, (payload) => {
-      if (this.onChatMessage) {
+      if (this.onChatMessage && payload.payload.userId !== this.userId) {
         this.onChatMessage(payload.payload)
       }
     })
 
-    // Listen for ALL broadcasts for debugging
-    this.channel.on('broadcast', { event: '*' }, (payload) => {
-      console.log('DEBUG: Received broadcast event:', payload.event, payload)
-    })
-
     // Listen for projectile spawns
     this.channel.on('broadcast', { event: 'projectile-spawn' }, (payload) => {
-      console.log('Received projectile-spawn broadcast (Raw):', payload)
-      
-      // Ignore own messages if self: true (unless debugging)
-      if (payload.payload.userId === this.userId) {
-        console.log('Ignoring own projectile broadcast')
-        return
-      }
-
-      if (this.onProjectileSpawn) {
-        console.log('Calling onProjectileSpawn callback')
+      if (this.onProjectileSpawn && payload.payload.userId !== this.userId) {
         this.onProjectileSpawn(payload.payload)
-      } else {
-        console.warn('onProjectileSpawn callback is NOT set!')
       }
     })
 
